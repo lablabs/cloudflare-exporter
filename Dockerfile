@@ -11,7 +11,9 @@ COPY go.sum go.sum
 RUN go get -d -v
 RUN CGO_ENABLED=0 GOOS=linux go build -o cloudflare_exporter .
 
-FROM scratch
+FROM alpine:3.12
+
+RUN apk update && apk add ca-certificates
 
 COPY --from=builder /app/cloudflare_exporter cloudflare_exporter
 
