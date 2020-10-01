@@ -10,8 +10,8 @@ import (
 
 func main() {
 
-	foo := newCloudflareCollector()
-	prometheus.MustRegister(foo)
+	cf := newCloudflareCollector()
+	prometheus.MustRegister(cf)
 
 	//This section will start the HTTP server and expose
 	//any metrics on the /metrics endpoint.

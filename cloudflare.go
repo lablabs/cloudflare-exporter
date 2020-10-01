@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 	"time"
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
@@ -9,6 +10,7 @@ import (
 )
 
 func fetchZones() []cloudflare.Zone {
+
 	api, err := cloudflare.New(os.Getenv("CF_API_KEY"), os.Getenv("CF_API_EMAIL"))
 	if err != nil {
 		log.Fatal(err)
@@ -24,15 +26,21 @@ func fetchZones() []cloudflare.Zone {
 }
 
 func fetchZoneTotals(zoneID string) *cloudflare.ZoneAnalytics {
+
+	var timeWindow int64
+	if os.Getenv("TIME_WINDOW_SECONDS") == "" {
+		timeWindow = 60
+	} else {
+		timeWindow, _ = strconv.ParseInt(os.Getenv("TIME_WINDOW_SECONDS"), 10, 64)
+	}
+
 	api, err := cloudflare.New(os.Getenv("CF_API_KEY"), os.Getenv("CF_API_EMAIL"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Options for last 60 seconds
-	count := 60
 	now := time.Now()
-	then := now.Add(time.Duration(-count) * time.Second)
+	then := now.Add(time.Duration(-timeWindow) * time.Second)
 	continuous := false
 
 	options := &cloudflare.ZoneAnalyticsOptions{
