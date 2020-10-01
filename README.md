@@ -18,9 +18,6 @@ The exporter can be configured using env variables
 |-|-|-|
 | `CF_API_KEY` | -- | API key |
 | `CF_API_EMAIL` | -- | email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
-| `TIME_WINDOW_SECONDS` | 60 | Time window to scrape. Defaults to 60 seconds |
-
-
 
 ## List of available metrics
 
@@ -31,6 +28,8 @@ The exporter can be configured using env variables
 | cloudflare_zone_bandwidth_ssl_unencrypted | Unencrypted bandwidth per zone in bytes | counter |
 | cloudflare_zone_bandwidth_total | Total bandwidth per zone in bytes | counter |
 | cloudflare_zone_bandwidth_uncached | Uncached bandwidth per zone in bytes | counter |
+| cloudflare_zone_bandwidth_content_type | Bandwidth per zone per content type | counter |
+| cloudflare_zone_bandwidth_country | Bandwidth per country per zone | counter |
 | cloudflare_zone_pageviews_total | Pageviews per zone | counter |
 | cloudflare_zone_requests_cached | Number of cached requests for zone | counter |
 | cloudflare_zone_requests_content_type | Number of request for zone per content type | counter |

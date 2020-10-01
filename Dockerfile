@@ -3,7 +3,6 @@ FROM golang:alpine as builder
 WORKDIR /app
 
 COPY cloudflare.go cloudflare.go
-COPY collector.go collector.go
 COPY main.go main.go
 COPY go.mod go.mod
 COPY go.sum go.sum
