@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/biter777/countries"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -52,7 +53,7 @@ var (
 	zoneRequestCountry = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_requests_country",
 		Help: "Number of request for zone per country",
-	}, []string{"zone", "country"},
+	}, []string{"zone", "country", "region"},
 	)
 
 	zoneRequestHTTPStatus = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -100,7 +101,7 @@ var (
 	zoneBandwidthCountry = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_bandwidth_country",
 		Help: "Bandwidth per country per zone",
-	}, []string{"zone", "country"},
+	}, []string{"zone", "country", "region"},
 	)
 
 	zoneThreatsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -112,7 +113,7 @@ var (
 	zoneThreatsCountry = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_threats_country",
 		Help: "Threats per zone per country",
-	}, []string{"zone", "country"},
+	}, []string{"zone", "country", "region"},
 	)
 
 	zoneThreatsType = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -160,7 +161,9 @@ func fetchMetrics() {
 			}
 
 			for country, value := range zt.Requests.Country {
-				zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country}).Add(float64(value))
+				c := countries.ByName(country)
+				region := c.Info().Region.Info().Name
+				zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country, "region": region}).Add(float64(value))
 			}
 
 			for status, value := range zt.Requests.HTTPStatus {
@@ -180,14 +183,18 @@ func fetchMetrics() {
 			}
 
 			for country, value := range zt.Bandwidth.Country {
-				zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country}).Add(float64(value))
+				c := countries.ByName(country)
+				region := c.Info().Region.Info().Name
+				zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country, "region": region}).Add(float64(value))
 			}
 
 			// Threats
 			zoneThreatsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Threats.All))
 
 			for country, value := range zt.Threats.Country {
-				zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country}).Add(float64(value))
+				c := countries.ByName(country)
+				region := c.Info().Region.Info().Name
+				zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country, "region": region}).Add(float64(value))
 			}
 
 			for t, value := range zt.Threats.Type {
