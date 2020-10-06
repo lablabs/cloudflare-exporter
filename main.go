@@ -143,6 +143,7 @@ var (
 
 func fetchMetrics() {
 	var wg sync.WaitGroup
+	start := time.Now()
 	zones := fetchZones()
 	for _, z := range zones {
 		wg.Add(1)
@@ -217,6 +218,8 @@ func fetchMetrics() {
 		}(z.ID, z.Name)
 	}
 	wg.Wait()
+	elapsed := time.Since(start)
+	log.Info("Evalutation took ", elapsed)
 }
 
 func main() {
