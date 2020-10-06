@@ -18,6 +18,5 @@ COPY --from=builder /app/cloudflare_exporter cloudflare_exporter
 
 ENV CF_API_KEY ""
 ENV CF_API_EMAIL ""
-ENV TIME_WINDOW_SECONDS 60
 
 ENTRYPOINT [ "./cloudflare_exporter" ]
