@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY cloudflare.go cloudflare.go
 COPY main.go main.go
+COPY prometheus.go prometheus.go
 COPY go.mod go.mod
 COPY go.sum go.sum
 
