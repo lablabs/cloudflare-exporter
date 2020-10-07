@@ -18,35 +18,32 @@ The exporter can be configured using env variables
 |-|-|-|
 | `CF_API_KEY` | -- | API key |
 | `CF_API_EMAIL` | -- | email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
+| `ZONE_<NAME>` | -- | Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards |
 
 ## List of available metrics
 
-| metrics name | desription | type |
-|-|-|-|
-| cloudflare_zone_bandwidth_cached | Cached bandwidth per zone in bytes | counter |
-| cloudflare_zone_bandwidth_ssl_encrypted | Encrypted bandwidth per zone in bytes | counter |
-| cloudflare_zone_bandwidth_ssl_unencrypted | Unencrypted bandwidth per zone in bytes | counter |
-| cloudflare_zone_bandwidth_total | Total bandwidth per zone in bytes | counter |
-| cloudflare_zone_bandwidth_uncached | Uncached bandwidth per zone in bytes | counter |
-| cloudflare_zone_bandwidth_content_type | Bandwidth per zone per content type | counter |
-| cloudflare_zone_bandwidth_country | Bandwidth per country per zone | counter |
-| cloudflare_zone_pageviews_total | Pageviews per zone | counter |
-| cloudflare_zone_requests_cached | Number of cached requests for zone | counter |
-| cloudflare_zone_requests_content_type | Number of request for zone per content type | counter |
-| cloudflare_zone_requests_country | Number of request for zone per country | counter |
-| cloudflare_zone_requests_ssl_encrypted | Number of encrypted requests for zone | counter |
-| cloudflare_zone_requests_ssl_unencrypted | Number of unencypted requests for zone | counter |
-| cloudflare_zone_requests_status | Number of request for zone per HTTP status | counter |
-| cloudflare_zone_requests_total | Number of requests for zone | counter |
-| cloudflare_zone_requests_uncached | Number of uncached requests for zone | counter |
-| cloudflare_zone_threats_total | Threats per zone | counter |
-| cloudflare_zone_uniques_total | Uniques per zone | counter |
-| cloudflare_zone_colocation_bandwidth_cached | Total cached bandwidth per colocation | counter |
-| cloudflare_zone_colocation_bandwidth_total | Total bandwidth per colocation | counter |
-| cloudflare_zone_colocation_requests_cached | Total cached requests per colocation | counter |
-| cloudflare_zone_colocation_requests_country | Requests per colocation per country | counter |
-| cloudflare_zone_colocation_requests_total | Total requests per colocation | counter |
-| cloudflare_zone_colocation_response_status | HTTP response status per colocation | counter |
+```
+# HELP cloudflare_zone_bandwidth_cached Cached bandwidth per zone in bytes
+# HELP cloudflare_zone_bandwidth_content_type Bandwidth per zone per content type
+# HELP cloudflare_zone_bandwidth_country Bandwidth per country per zone
+# HELP cloudflare_zone_bandwidth_ssl_encrypted Encrypted bandwidth per zone in bytes
+# HELP cloudflare_zone_bandwidth_total Total bandwidth per zone in bytes
+# HELP cloudflare_zone_colocation_bandwidth_cached Total cached bandwidth per colocation
+# HELP cloudflare_zone_colocation_bandwidth_total Total bandwidth per colocation
+# HELP cloudflare_zone_colocation_requests_cached Total cached requests per colocation
+# HELP cloudflare_zone_colocation_requests_country Requests per colocation per country
+# HELP cloudflare_zone_colocation_requests_total Total requests per colocation
+# HELP cloudflare_zone_colocation_response_status HTTP response status per colocation
+# HELP cloudflare_zone_pageviews_total Pageviews per zone
+# HELP cloudflare_zone_requests_cached Number of cached requests for zone
+# HELP cloudflare_zone_requests_content_type Number of request for zone per content type
+# HELP cloudflare_zone_requests_country Number of request for zone per country
+# HELP cloudflare_zone_requests_ssl_encrypted Number of encrypted requests for zone
+# HELP cloudflare_zone_requests_status Number of request for zone per HTTP status
+# HELP cloudflare_zone_requests_total Number of requests for zone
+# HELP cloudflare_zone_threats_country Threats per zone per country
+# HELP cloudflare_zone_threats_total Threats per zone
+```
 
 
 ## Docker
