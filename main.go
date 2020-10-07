@@ -144,6 +144,7 @@ var (
 func fetchMetrics() {
 	var wg sync.WaitGroup
 	start := time.Now()
+
 	zones := fetchZones()
 	for _, z := range zones {
 		wg.Add(1)
@@ -218,8 +219,6 @@ func fetchMetrics() {
 		}(z.ID, z.Name)
 	}
 	wg.Wait()
-	elapsed := time.Since(start)
-	log.Info("Evalutation took ", elapsed)
 }
 
 func main() {
@@ -227,7 +226,9 @@ func main() {
 		for ; true; <-time.NewTicker(60 * time.Second).C {
 			go fetchMetrics()
 		}
-	}() //This section will start the HTTP server and expose
+	}()
+
+	//This section will start the HTTP server and expose
 	//any metrics on the /metrics endpoint.
 	http.Handle("/metrics", promhttp.Handler())
 	log.Info("Beginning to serve on port :8080")
