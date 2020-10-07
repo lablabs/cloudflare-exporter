@@ -17,6 +17,57 @@ type cloudflareResponse struct {
 }
 
 type zoneResp struct {
+	Groups []struct {
+		Dimensions struct {
+			Datetime string `json:"datetime"`
+		}
+		Sum struct {
+			Bytes          uint64 `json:"bytes"`
+			CachedBytes    uint64 `json:"cachedBytes"`
+			CachedRequests uint64 `json:"cachedRequests"`
+			Requests       uint64 `json:"requests"`
+
+			BrowserMap []struct {
+				PageViews       uint64 `json:"pageViews"`
+				uaBrowserFamily string `json:"uaBrowserFamily"`
+			} `json:"browserMap"`
+			ClientHTTPVersion []struct {
+				Protocol string `json:"clientHTTPProtocol"`
+				Requests uint64 `json:"requests"`
+			} `json:"clientHTTPVersionMap"`
+			ClientSSL []struct {
+				Protocol string `json:"clientSSLProtocol"`
+			} `json:"clientSSLMap"`
+			ContentType []struct {
+				Bytes                   uint64 `json:"bytes"`
+				Requests                uint64 `json:"requests"`
+				EdgeResponseContentType string `json:"edgeResponseContentTypeName"`
+			} `json:"contentTypeMap"`
+			Country []struct {
+				Bytes             uint64 `json:"bytes"`
+				ClientCountryName string `json:"clientCountryName"`
+				Requests          uint64 `json:"requests"`
+				Threats           uint64 `json:"threats"`
+			} `json:"countryMap"`
+			EncryptedBytes    uint64 `json:encryptedBytes`
+			EncryptedRequests uint64 `json:encryptedRequests`
+			IPClass           []struct {
+				Type     string `json:"ipType"`
+				Requests uint64 `json:requests`
+			} `json:"ipClassMap"`
+			PageViews      uint64 `json:"pageViews"`
+			ResponseStatus []struct {
+				EdgeResponseStatus int    `json:"edgeResponseStatus"`
+				Requests           uint64 `json:"requests"`
+			} `json:"responseStatusMap"`
+			ThreatPathing []struct {
+				Name     string `json:"threatPathingName"`
+				Requests uint64 `json:"requests	"`
+			} `json:"threatPathingMap"`
+			Threats uint64 `json:"threats"`
+		}
+	} `json:"httpRequests1mGroups"`
+
 	ColoGroups []struct {
 		Dimensions struct {
 			Datetime string `json:"datetime"`
@@ -26,7 +77,7 @@ type zoneResp struct {
 			Bytes          uint64 `json:"bytes"`
 			CachedBytes    uint64 `json:"cachedBytes"`
 			CachedRequests uint64 `json:"cachedRequests"`
-			Requests       uint64 `json:"Requests"`
+			Requests       uint64 `json:"requests"`
 			CountryMap     []struct {
 				ClientCountryName string `json:"clientCountryName"`
 				Requests          uint64 `json:"requests"`
@@ -91,7 +142,94 @@ func fetchZoneTotals(zoneID string) *cloudflare.ZoneAnalytics {
 	return &zoneTotals
 }
 
-func fetchColoTotals(zoneID string) *cloudflareResponse {
+func fetchZoneTotalsV2(zoneID string) (*cloudflareResponse, error) {
+	now := time.Now().Add(time.Duration(-60) * time.Second).UTC()
+	s := 60 * time.Second
+	now = now.Truncate(s)
+
+	http1mGroups := graphql.NewRequest(`
+query ($zoneID: String!, $time: Time!, $limit: Int!) {
+	viewer {
+		zones(filter: { zoneTag: $zoneID }) {
+			zoneTag
+
+			httpRequests1mGroups(
+				limit: $limit
+				filter: { datetime: $time }
+			) {
+				sum {
+					browserMap {
+						pageViews
+						uaBrowserFamily
+					}
+					bytes
+					cachedBytes
+					cachedRequests
+					clientHTTPVersionMap {
+						clientHTTPProtocol
+						requests
+					}
+					clientSSLMap {
+						clientSSLProtocol
+						requests
+					}
+					contentTypeMap {
+						bytes
+						requests
+						edgeResponseContentTypeName
+					}
+					countryMap {
+						bytes
+						clientCountryName
+						requests
+						threats
+					}
+					encryptedBytes
+					encryptedRequests
+					ipClassMap {
+						ipType
+						requests
+					}
+					pageViews
+					requests
+					responseStatusMap {
+						edgeResponseStatus
+						requests
+					}
+					threatPathingMap {
+						requests
+						threatPathingName
+					}
+					threats
+				}
+				dimensions {
+					datetime
+				}
+			}
+		}
+	}
+}
+`)
+
+	http1mGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
+	http1mGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
+	http1mGroups.Var("limit", 9999)
+	http1mGroups.Var("time", now)
+	http1mGroups.Var("zoneID", zoneID)
+
+	ctx := context.Background()
+	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
+
+	var resp cloudflareResponse
+	if err := graphqlClient.Run(ctx, http1mGroups, &resp); err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func fetchColoTotals(zoneID string) (*cloudflareResponse, error) {
 
 	now := time.Now().Add(time.Duration(-60) * time.Second).UTC()
 	s := 60 * time.Second
@@ -146,8 +284,9 @@ func fetchColoTotals(zoneID string) *cloudflareResponse {
 	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
 	var resp cloudflareResponse
 	if err := graphqlClient.Run(ctx, http1mGroupsByColo, &resp); err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return nil, err
 	}
 
-	return &resp
+	return &resp, nil
 }

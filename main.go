@@ -20,6 +20,12 @@ func fetchMetrics() {
 }
 
 func main() {
+
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	log.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
+
 	go func() {
 		for ; true; <-time.NewTicker(60 * time.Second).C {
 			go fetchMetrics()
