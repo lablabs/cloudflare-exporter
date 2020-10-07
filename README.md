@@ -41,6 +41,12 @@ The exporter can be configured using env variables
 | cloudflare_zone_requests_uncached | Number of uncached requests for zone | counter |
 | cloudflare_zone_threats_total | Threats per zone | counter |
 | cloudflare_zone_uniques_total | Uniques per zone | counter |
+| cloudflare_zone_colocation_bandwidth_cached | Total cached bandwidth per colocation | counter |
+| cloudflare_zone_colocation_bandwidth_total | Total bandwidth per colocation | counter |
+| cloudflare_zone_colocation_requests_cached | Total cached requests per colocation | counter |
+| cloudflare_zone_colocation_requests_country | Requests per colocation per country | counter |
+| cloudflare_zone_colocation_requests_total | Total requests per colocation | counter |
+| cloudflare_zone_colocation_response_status | HTTP response status per colocation | counter |
 
 
 ## Docker
