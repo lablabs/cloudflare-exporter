@@ -143,8 +143,6 @@ var (
 
 func fetchMetrics() {
 	var wg sync.WaitGroup
-	start := time.Now()
-
 	zones := fetchZones()
 	for _, z := range zones {
 		wg.Add(1)
