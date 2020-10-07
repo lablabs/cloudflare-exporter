@@ -10,47 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	http1mGroupsByColo = graphql.NewRequest(`
-	query ($zoneID: String!, $time: Time!, $limit: Int!) {
-		viewer {
-			zones(filter: { zoneTag: $zoneID }) {
-				zoneTag
-
-				httpRequests1mByColoGroups(
-					limit: $limit
-					filter: { datetime: $time }
-				) {
-					sum {
-						requests
-						bytes
-						countryMap {
-							clientCountryName
-							requests
-							threats
-						}
-						responseStatusMap {
-							edgeResponseStatus
-							requests
-						}
-						cachedRequests
-						cachedBytes
-						threatPathingMap {
-							requests
-							threatPathingName
-						}
-					}
-					dimensions {
-						coloCode
-						datetime
-					}
-				}
-			}
-		}
-	}
-`)
-)
-
 type cloudflareResponse struct {
 	Viewer struct {
 		Zones []zoneResp `json:"zones"`
@@ -137,6 +96,45 @@ func fetchColoTotals(zoneID string) *cloudflareResponse {
 	now := time.Now().Add(time.Duration(-60) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
+
+	http1mGroupsByColo := graphql.NewRequest(`
+	query ($zoneID: String!, $time: Time!, $limit: Int!) {
+		viewer {
+			zones(filter: { zoneTag: $zoneID }) {
+				zoneTag
+
+				httpRequests1mByColoGroups(
+					limit: $limit
+					filter: { datetime: $time }
+				) {
+					sum {
+						requests
+						bytes
+						countryMap {
+							clientCountryName
+							requests
+							threats
+						}
+						responseStatusMap {
+							edgeResponseStatus
+							requests
+						}
+						cachedRequests
+						cachedBytes
+						threatPathingMap {
+							requests
+							threatPathingName
+						}
+					}
+					dimensions {
+						coloCode
+						datetime
+					}
+				}
+			}
+		}
+	}
+`)
 
 	http1mGroupsByColo.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
 	http1mGroupsByColo.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
