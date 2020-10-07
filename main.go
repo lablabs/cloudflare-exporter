@@ -14,6 +14,8 @@ func fetchMetrics() {
 	zones := fetchZones()
 	for _, z := range zones {
 		go fetchZoneAnalytics(z.ID, z.Name, &wg)
+		// Sleep due to rate limiting
+		time.Sleep(500 * time.Nanosecond)
 		go fetchZoneColocationAnalytics(z.ID, z.Name, &wg)
 	}
 	wg.Wait()

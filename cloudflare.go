@@ -20,7 +20,7 @@ type zoneResp struct {
 	Groups []struct {
 		Dimensions struct {
 			Datetime string `json:"datetime"`
-		}
+		} `json:"dimensions"`
 		Sum struct {
 			Bytes          uint64 `json:"bytes"`
 			CachedBytes    uint64 `json:"cachedBytes"`
@@ -49,11 +49,11 @@ type zoneResp struct {
 				Requests          uint64 `json:"requests"`
 				Threats           uint64 `json:"threats"`
 			} `json:"countryMap"`
-			EncryptedBytes    uint64 `json:encryptedBytes`
-			EncryptedRequests uint64 `json:encryptedRequests`
+			EncryptedBytes    uint64 `json:"encryptedBytes"`
+			EncryptedRequests uint64 `json:"encryptedRequests"`
 			IPClass           []struct {
 				Type     string `json:"ipType"`
-				Requests uint64 `json:requests`
+				Requests uint64 `json:"requests"`
 			} `json:"ipClassMap"`
 			PageViews      uint64 `json:"pageViews"`
 			ResponseStatus []struct {
@@ -65,7 +65,7 @@ type zoneResp struct {
 				Requests uint64 `json:"requests	"`
 			} `json:"threatPathingMap"`
 			Threats uint64 `json:"threats"`
-		}
+		} `json:"sum"`
 	} `json:"httpRequests1mGroups"`
 
 	ColoGroups []struct {
@@ -113,37 +113,8 @@ func fetchZones() []cloudflare.Zone {
 
 }
 
-// APIv4 will be deprecated Nov 2020
-func fetchZoneTotals(zoneID string) *cloudflare.ZoneAnalytics {
-
-	api, err := cloudflare.New(os.Getenv("CF_API_KEY"), os.Getenv("CF_API_EMAIL"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	now := time.Now().Add(time.Duration(-60) * time.Second)
-	then := now.Add(time.Duration(-60) * time.Second)
-	continuous := false
-
-	options := &cloudflare.ZoneAnalyticsOptions{
-		Since:      &then,
-		Until:      &now,
-		Continuous: &continuous,
-	}
-
-	zone, err := api.ZoneAnalyticsDashboard(zoneID, *options)
-	if err != nil {
-		log.Fatal(err)
-		return nil
-	}
-
-	zoneTotals := zone.Totals
-
-	return &zoneTotals
-}
-
-func fetchZoneTotalsV2(zoneID string) (*cloudflareResponse, error) {
-	now := time.Now().Add(time.Duration(-60) * time.Second).UTC()
+func fetchZoneTotals(zoneID string) (*cloudflareResponse, error) {
+	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 
@@ -231,7 +202,7 @@ query ($zoneID: String!, $time: Time!, $limit: Int!) {
 
 func fetchColoTotals(zoneID string) (*cloudflareResponse, error) {
 
-	now := time.Now().Add(time.Duration(-60) * time.Second).UTC()
+	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 

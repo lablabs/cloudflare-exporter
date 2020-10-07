@@ -213,7 +213,7 @@ func fetchZoneColocationAnalytics(ID string, name string, wg *sync.WaitGroup) {
 
 func fetchZoneAnalytics(ID string, name string, wg *sync.WaitGroup) {
 	wg.Add(1)
-	r, err := fetchZoneTotalsV2(ID)
+	r, err := fetchZoneTotals(ID)
 
 	if err != nil || len(r.Viewer.Zones[0].Groups) == 0 {
 		return
