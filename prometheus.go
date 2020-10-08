@@ -256,7 +256,7 @@ func fetchZoneAnalytics(ID string, name string, wg *sync.WaitGroup) {
 	zonePageviewsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.PageViews))
 
 	// Uniques
-	// zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Uniques.All))
+	zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Unique.Uniques))
 
 	defer wg.Done()
 }

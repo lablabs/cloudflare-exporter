@@ -21,6 +21,9 @@ type zoneResp struct {
 		Dimensions struct {
 			Datetime string `json:"datetime"`
 		} `json:"dimensions"`
+		Unique struct {
+			Uniques uint64 `json:"uniques"`
+		} `json:"uniq"`
 		Sum struct {
 			Bytes          uint64 `json:"bytes"`
 			CachedBytes    uint64 `json:"cachedBytes"`
@@ -128,6 +131,9 @@ query ($zoneID: String!, $time: Time!, $limit: Int!) {
 				limit: $limit
 				filter: { datetime: $time }
 			) {
+				uniq {
+					uniques
+				}
 				sum {
 					browserMap {
 						pageViews
