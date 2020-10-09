@@ -9,16 +9,29 @@ We help companies build, run, deploy and scale software and infrastructure by em
 ## Description
 
 Prometheus exporter exposing Cloudflare Analytics dashboard data on per-zone basis.
+The exporter is also able to scrape Zone metrics by Colocations (https://www.cloudflare.com/network/).
+
+## Grafana Dashboard
+
+![Dashboard](https://i.ibb.co/HDsqDF1/cf-exporter.png)
+
+Our public dashboard is available at https://grafana.com/grafana/dashboards/13133
+
+## Helm chart
+
+To deploy the exporter into Kubernetes, we recommend using the following Helm chart.
+
+https://github.com/lablabs/cloudflare-exporter-helm
 
 ## Configuration
 
 The exporter can be configured using env variables
 
-| **KEY** | **default** | **description** |
+| **KEY** | **description** |
 |-|-|-|
-| `CF_API_KEY` | -- | API key |
-| `CF_API_EMAIL` | -- | email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
-| `ZONE_<NAME>` | -- | Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards |
+| `CF_API_KEY` |  API key |
+| `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
+| `ZONE_<NAME>` |  (Optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. Defaults to all zones. |
 
 ## List of available metrics
 
