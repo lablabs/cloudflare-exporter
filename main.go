@@ -26,10 +26,15 @@ func getTargetZones() []string {
 func filterZones(all []cloudflare.Zone, target []string) []cloudflare.Zone {
 	var filtered []cloudflare.Zone
 
+	if (len(target)) == 0 {
+		return all
+	}
+
 	for _, tz := range target {
 		for _, z := range all {
 			if tz == z.ID {
 				filtered = append(filtered, z)
+				log.Info("Filtering zone: ", z.ID, " ", z.Name)
 			}
 		}
 	}
