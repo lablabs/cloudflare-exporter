@@ -46,10 +46,23 @@ func fetchMetrics() {
 	var wg sync.WaitGroup
 	zones := fetchZones()
 
-	for _, z := range filterZones(zones, getTargetZones()) {
-		go fetchZoneAnalytics(z.ID, z.Name, &wg)
-		go fetchZoneColocationAnalytics(z.ID, z.Name, &wg)
+	filteredZones := filterZones(zones, getTargetZones())
+
+	// Make requests in groups of 10 to avoid rate limit
+	// 10 is the maximum amount of zones you can request at once
+	for len(filteredZones) > 0 {
+		sliceLength := 10
+		if len(filteredZones) < 10 {
+			sliceLength = len(filteredZones)
+		}
+
+		targetZones := filteredZones[:sliceLength]
+		filteredZones = filteredZones[len(targetZones):]
+
+		go fetchZoneAnalytics(targetZones, &wg)
+		go fetchZoneColocationAnalytics(targetZones, &wg)
 	}
+
 	wg.Wait()
 }
 

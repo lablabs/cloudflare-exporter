@@ -116,15 +116,15 @@ func fetchZones() []cloudflare.Zone {
 
 }
 
-func fetchZoneTotals(zoneID string) (*cloudflareResponse, error) {
+func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
 	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 
 	http1mGroups := graphql.NewRequest(`
-query ($zoneID: String!, $time: Time!, $limit: Int!) {
+query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
 	viewer {
-		zones(filter: { zoneTag: $zoneID }) {
+		zones(filter: { zoneTag_in: $zoneIDs }) {
 			zoneTag
 
 			httpRequests1mGroups(
@@ -192,7 +192,7 @@ query ($zoneID: String!, $time: Time!, $limit: Int!) {
 	http1mGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
 	http1mGroups.Var("limit", 9999)
 	http1mGroups.Var("time", now)
-	http1mGroups.Var("zoneID", zoneID)
+	http1mGroups.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
@@ -206,16 +206,16 @@ query ($zoneID: String!, $time: Time!, $limit: Int!) {
 	return &resp, nil
 }
 
-func fetchColoTotals(zoneID string) (*cloudflareResponse, error) {
+func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
 
 	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 
 	http1mGroupsByColo := graphql.NewRequest(`
-	query ($zoneID: String!, $time: Time!, $limit: Int!) {
+	query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
 		viewer {
-			zones(filter: { zoneTag: $zoneID }) {
+			zones(filter: { zoneTag_in: $zoneIDs }) {
 				zoneTag
 
 				httpRequests1mByColoGroups(
@@ -255,7 +255,7 @@ func fetchColoTotals(zoneID string) (*cloudflareResponse, error) {
 	http1mGroupsByColo.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
 	http1mGroupsByColo.Var("limit", 9999)
 	http1mGroupsByColo.Var("time", now)
-	http1mGroupsByColo.Var("zoneID", zoneID)
+	http1mGroupsByColo.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
@@ -266,4 +266,24 @@ func fetchColoTotals(zoneID string) (*cloudflareResponse, error) {
 	}
 
 	return &resp, nil
+}
+
+func findZoneName(zones []cloudflare.Zone, ID string) string {
+	for _, z := range zones {
+		if z.ID == ID {
+			return z.Name
+		}
+	}
+
+	return ""
+}
+
+func extractZoneIDs(zones []cloudflare.Zone) []string {
+	var IDs []string
+
+	for _, z := range zones {
+		IDs = append(IDs, z.ID)
+	}
+
+	return IDs
 }
