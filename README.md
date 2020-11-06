@@ -17,11 +17,14 @@ The exporter is also able to scrape Zone metrics by Colocations (https://www.clo
 
 Our public dashboard is available at https://grafana.com/grafana/dashboards/13133
 
-## Helm chart
+## Helm chart repository
 
-To deploy the exporter into Kubernetes, we recommend using the following Helm chart.
+To deploy the exporter into Kubernetes, we recommend to use our manager Helm repository at
 
-https://github.com/lablabs/cloudflare-exporter-helm
+```
+helm repo add cloudflare-exporter https://lablabs.github.io/cloudflare-exporter/
+helm install cloudflare-exporter/cloudflare-exporter
+```
 
 ## Configuration
 
