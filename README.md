@@ -31,7 +31,7 @@ helm install cloudflare-exporter/cloudflare-exporter
 The exporter can be configured using env variables
 
 | **KEY** | **description** |
-|-|-|-|
+|-|-|
 | `CF_API_KEY` |  API key |
 | `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
 | `ZONE_<NAME>` |  (Optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. Defaults to all zones. |
