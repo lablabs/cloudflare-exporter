@@ -138,46 +138,16 @@ var (
 	}, []string{"zone"},
 	)
 
-	zoneColocationRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_requests_total",
-		Help: "Total requests per colocation",
+	zoneColocationVisits = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_colocation_visits",
+		Help: "Total visits per colocation",
 	}, []string{"zone", "colocation"},
 	)
 
-	zoneColocationRequestsCached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_requests_cached",
-		Help: "Total cached requests per colocation",
+	zoneColocationEdgeResponseBytes = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_colocation_edge_response_bytes",
+		Help: "Edge response bytes per colocation",
 	}, []string{"zone", "colocation"},
-	)
-
-	zoneColocationBandwidthTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_bandwidth_total",
-		Help: "Total bandwidth per colocation",
-	}, []string{"zone", "colocation"},
-	)
-
-	zoneColocationBandwidthCached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_bandwidth_cached",
-		Help: "Total cached bandwidth per colocation",
-	}, []string{"zone", "colocation"},
-	)
-
-	zoneColocationResponseStatus = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_response_status",
-		Help: "HTTP response status per colocation",
-	}, []string{"zone", "colocation", "status"},
-	)
-
-	zoneColocationRequestsByCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_requests_country",
-		Help: "Requests per colocation per country",
-	}, []string{"zone", "colocation", "country", "region"},
-	)
-
-	zoneColocationThreatsByCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_threats_country",
-		Help: "Threats per colocation per country",
-	}, []string{"zone", "colocation", "country", "region"},
 	)
 )
 
@@ -195,23 +165,9 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 		cg := z.ColoGroups
 		name := findZoneName(zones, z.ZoneTag)
-
 		for _, c := range cg {
-			zoneColocationRequestsTotal.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.Requests))
-			zoneColocationRequestsCached.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.CachedRequests))
-			zoneColocationBandwidthTotal.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.Bytes))
-			zoneColocationBandwidthCached.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.CachedBytes))
-
-			for _, s := range c.Sum.ResponseStatusMap {
-				zoneColocationResponseStatus.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "status": strconv.Itoa(s.EdgeResponseStatus)}).Add(float64(s.Requests))
-			}
-
-			for _, country := range c.Sum.CountryMap {
-				region := countries.ByName(country.ClientCountryName).Info().Region.Info().Name
-
-				zoneColocationRequestsByCountry.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
-				zoneColocationRequestsByCountry.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
-			}
+			zoneColocationVisits.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.Visits))
+			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.EdgeResponseBytes))
 		}
 	}
 
