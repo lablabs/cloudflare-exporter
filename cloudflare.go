@@ -76,27 +76,15 @@ type zoneResp struct {
 			Datetime string `json:"datetime"`
 			ColoCode string `json:"coloCode"`
 		} `json:"dimensions"`
+		Count uint64 `json:"count"`
 		Sum struct {
-			Bytes          uint64 `json:"bytes"`
-			CachedBytes    uint64 `json:"cachedBytes"`
-			CachedRequests uint64 `json:"cachedRequests"`
-			Requests       uint64 `json:"requests"`
-			CountryMap     []struct {
-				ClientCountryName string `json:"clientCountryName"`
-				Requests          uint64 `json:"requests"`
-				Threats           uint64 `json:"threats"`
-			} `json:"countryMap"`
-			ResponseStatusMap []struct {
-				EdgeResponseStatus int    `json:"edgeResponseStatus"`
-				Requests           uint64 `json:"requests"`
-			} `json:"responseStatusMap"`
-			ThreatPathingMap []struct {
-				ThreatPathingName string `json:"threatPathingName"`
-				Requests          uint64 `json:"requests"`
-			} `json:"threatPathingMap"`
+			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
+			Visits uint64 `json:"visits"`
 		} `json:"sum"`
-	} `json:"httpRequests1mByColoGroups"`
-
+		Avg struct {
+			sampleInterval uint64 `json:"sampleInterval"`
+		} `json:"avg"`
+	} `json:"httpRequestsAdaptiveGroups"`
 	ZoneTag string `json:"zoneTag"`
 }
 
@@ -212,55 +200,43 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
 	s := 60 * time.Second
 	now = now.Truncate(s)
 
-	http1mGroupsByColo := graphql.NewRequest(`
+	httpRequestsAdaptiveGroups := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
 		viewer {
 			zones(filter: { zoneTag_in: $zoneIDs }) {
 				zoneTag
-
-				httpRequests1mByColoGroups(
+				httpRequestsAdaptiveGroups(
 					limit: $limit
 					filter: { datetime: $time }
-				) {
-					sum {
-						requests
-						bytes
-						countryMap {
-							clientCountryName
-							requests
-							threats
+					) {
+						count
+						avg {
+							sampleInterval
 						}
-						responseStatusMap {
-							edgeResponseStatus
-							requests
+						dimensions {
+							coloCode
+							datetime
 						}
-						cachedRequests
-						cachedBytes
-						threatPathingMap {
-							requests
-							threatPathingName
+						sum {
+							edgeResponseBytes
+							visits
 						}
-					}
-					dimensions {
-						coloCode
-						datetime
 					}
 				}
 			}
 		}
-	}
 `)
 
-	http1mGroupsByColo.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
-	http1mGroupsByColo.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
-	http1mGroupsByColo.Var("limit", 9999)
-	http1mGroupsByColo.Var("time", now)
-	http1mGroupsByColo.Var("zoneIDs", zoneIDs)
+	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
+	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
+	httpRequestsAdaptiveGroups.Var("limit", 9999)
+	httpRequestsAdaptiveGroups.Var("time", now)
+	httpRequestsAdaptiveGroups.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
 	var resp cloudflareResponse
-	if err := graphqlClient.Run(ctx, http1mGroupsByColo, &resp); err != nil {
+	if err := graphqlClient.Run(ctx, httpRequestsAdaptiveGroups, &resp); err != nil {
 		log.Error(err)
 		return nil, err
 	}
