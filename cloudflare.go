@@ -212,19 +212,19 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 }
 
 func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
-
-	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
+	now := time.Now().Add(-180 * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
 
 	httpRequestsAdaptiveGroups := graphql.NewRequest(`
-	query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
+	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
 			zones(filter: { zoneTag_in: $zoneIDs }) {
 				zoneTag
 				httpRequestsAdaptiveGroups(
 					limit: $limit
-					filter: { datetime: $time }
+					filter: { datetime_geq: $mintime, datetime_lt: $maxtime }
 					) {
 						count
 						avg {
@@ -247,7 +247,8 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
 	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
 	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
 	httpRequestsAdaptiveGroups.Var("limit", 9999)
-	httpRequestsAdaptiveGroups.Var("time", now)
+	httpRequestsAdaptiveGroups.Var("maxtime", now)
+	httpRequestsAdaptiveGroups.Var("mintime", now1mAgo)
 	httpRequestsAdaptiveGroups.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
