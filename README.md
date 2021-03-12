@@ -59,6 +59,7 @@ The exporter can be configured using env variables
 # HELP cloudflare_zone_requests_total Number of requests for zone
 # HELP cloudflare_zone_threats_country Threats per zone per country
 # HELP cloudflare_zone_threats_total Threats per zone
+# HELP cloudflare_zone_firewall_events_count Count of Firewall events
 ```
 
 
