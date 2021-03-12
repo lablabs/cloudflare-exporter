@@ -17,7 +17,7 @@ type cloudflareResponse struct {
 }
 
 type zoneResp struct {
-	Groups []struct {
+	HTTP1mGroups []struct {
 		Dimensions struct {
 			Datetime string `json:"datetime"`
 		} `json:"dimensions"`
@@ -85,6 +85,17 @@ type zoneResp struct {
 			sampleInterval uint64 `json:"sampleInterval"`
 		} `json:"avg"`
 	} `json:"httpRequestsAdaptiveGroups"`
+
+	FirewallEventsAdaptiveGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			Action                   string `json:"action"`
+			BotScore                 uint8 `json:"botScore"`
+			ClientCountryName string `json:"clientCountryName"`
+			ClientRequestHTTPHost    string `json:"clientRequestHTTPHost"`
+		} `json:"dimensions"`
+	} `json:"firewallEventsAdaptiveGroups"`
+
 	ZoneTag string `json:"zoneTag"`
 }
 
@@ -105,20 +116,17 @@ func fetchZones() []cloudflare.Zone {
 }
 
 func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
-	now := time.Now().Add(time.Duration(-180) * time.Second).UTC()
+	now := time.Now().Add(-180 * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
 
 	http1mGroups := graphql.NewRequest(`
-query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
+query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	viewer {
 		zones(filter: { zoneTag_in: $zoneIDs }) {
 			zoneTag
-
-			httpRequests1mGroups(
-				limit: $limit
-				filter: { datetime: $time }
-			) {
+			httpRequests1mGroups(limit: $limit filter: { datetime: $maxtime }) {
 				uniq {
 					uniques
 				}
@@ -171,6 +179,16 @@ query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
 					datetime
 				}
 			}
+			firewallEventsAdaptiveGroups(limit: $limit, filter: {datetime_geq: $mintime, datetime_lt: $maxtime}) {
+				count
+				dimensions {
+				  action	
+				  source
+				  botScore
+				  clientRequestHTTPHost
+				  clientCountryName
+				}
+			}
 		}
 	}
 }
@@ -179,7 +197,8 @@ query ($zoneIDs: [String!], $time: Time!, $limit: Int!) {
 	http1mGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
 	http1mGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
 	http1mGroups.Var("limit", 9999)
-	http1mGroups.Var("time", now)
+	http1mGroups.Var("maxtime", now)
+	http1mGroups.Var("mintime", now1mAgo)
 	http1mGroups.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()

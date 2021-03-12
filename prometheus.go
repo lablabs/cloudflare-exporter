@@ -149,6 +149,11 @@ var (
 		Help: "Edge response bytes per colocation",
 	}, []string{"zone", "colocation"},
 	)
+
+	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_firewall_events_count",
+		Help: "Count of Firewall events",
+	}, []string{"zone", "action", "host", "country"})
 )
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -176,6 +181,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
+	defer wg.Done()
 
 	zoneIDs := extractZoneIDs(zones)
 
@@ -185,52 +191,70 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	}
 
 	for _, z := range r.Viewer.Zones {
-
-		// Filter zones with no available metrics
-		if len(z.Groups) == 0 {
-			continue
-		}
-
-		zt := z.Groups[0]
 		name := findZoneName(zones, z.ZoneTag)
-
-		zoneRequestTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Requests))
-		zoneRequestCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedRequests))
-		zoneRequestSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedRequests))
-
-		for _, ct := range zt.Sum.ContentType {
-			zoneRequestContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
-			zoneBandwidthContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
-		}
-
-		for _, country := range zt.Sum.Country {
-			c := countries.ByName(country.ClientCountryName)
-			region := c.Info().Region.Info().Name
-
-			zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
-			zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
-			zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
-		}
-
-		for _, status := range zt.Sum.ResponseStatus {
-			zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
-		}
-
-		zoneBandwidthTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Bytes))
-		zoneBandwidthCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedBytes))
-		zoneBandwidthSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedBytes))
-
-		zoneThreatsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Threats))
-
-		for _, t := range zt.Sum.ThreatPathing {
-			zoneThreatsType.With(prometheus.Labels{"zone": name, "type": t.Name}).Add(float64(t.Requests))
-		}
-
-		zonePageviewsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.PageViews))
-
-		// Uniques
-		zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Unique.Uniques))
-
+		addHTTPGroups(&z, name)
+		addFirewallGroups(&z, name)
 	}
-	defer wg.Done()
+}
+
+func addHTTPGroups(z *zoneResp, name string) {
+	// Nothing to do.
+	if len(z.HTTP1mGroups) == 0 {
+		return
+	}
+	zt := z.HTTP1mGroups[0]
+
+	zoneRequestTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Requests))
+	zoneRequestCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedRequests))
+	zoneRequestSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedRequests))
+
+	for _, ct := range zt.Sum.ContentType {
+		zoneRequestContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
+		zoneBandwidthContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
+	}
+
+	for _, country := range zt.Sum.Country {
+		c := countries.ByName(country.ClientCountryName)
+		region := c.Info().Region.Info().Name
+
+		zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
+		zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
+		zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
+	}
+
+	for _, status := range zt.Sum.ResponseStatus {
+		zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
+	}
+
+	zoneBandwidthTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Bytes))
+	zoneBandwidthCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedBytes))
+	zoneBandwidthSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedBytes))
+
+	zoneThreatsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Threats))
+
+	for _, t := range zt.Sum.ThreatPathing {
+		zoneThreatsType.With(prometheus.Labels{"zone": name, "type": t.Name}).Add(float64(t.Requests))
+	}
+
+	zonePageviewsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.PageViews))
+
+	// Uniques
+	zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Unique.Uniques))
+}
+
+func addFirewallGroups(z *zoneResp, name string) {
+	// Nothing to do.
+	if len(z.FirewallEventsAdaptiveGroups) == 0 {
+		return
+	}
+
+	for _, g := range z.FirewallEventsAdaptiveGroups {
+		zoneFirewallEventsCount.With(
+			prometheus.Labels{
+				"zone":     name,
+				"action":   g.Dimensions.Action,
+				"host":     g.Dimensions.ClientRequestHTTPHost,
+				"country":  g.Dimensions.ClientCountryName,
+			}).Add(float64(g.Count))
+	}
 }
