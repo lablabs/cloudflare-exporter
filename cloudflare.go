@@ -90,7 +90,6 @@ type zoneResp struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
 			Action                   string `json:"action"`
-			BotScore                 uint8 `json:"botScore"`
 			ClientCountryName string `json:"clientCountryName"`
 			ClientRequestHTTPHost    string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
@@ -184,7 +183,6 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 				dimensions {
 				  action	
 				  source
-				  botScore
 				  clientRequestHTTPHost
 				  clientCountryName
 				}
