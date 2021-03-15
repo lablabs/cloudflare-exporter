@@ -153,7 +153,7 @@ var (
 	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_firewall_events_count",
 		Help: "Count of Firewall events",
-	}, []string{"zone", "action", "host", "country"})
+	}, []string{"zone", "action", "source", "host", "country"})
 )
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -251,10 +251,11 @@ func addFirewallGroups(z *zoneResp, name string) {
 	for _, g := range z.FirewallEventsAdaptiveGroups {
 		zoneFirewallEventsCount.With(
 			prometheus.Labels{
-				"zone":     name,
-				"action":   g.Dimensions.Action,
-				"host":     g.Dimensions.ClientRequestHTTPHost,
-				"country":  g.Dimensions.ClientCountryName,
+				"zone":    name,
+				"action":  g.Dimensions.Action,
+				"source":  g.Dimensions.Source,
+				"host":    g.Dimensions.ClientRequestHTTPHost,
+				"country": g.Dimensions.ClientCountryName,
 			}).Add(float64(g.Count))
 	}
 }

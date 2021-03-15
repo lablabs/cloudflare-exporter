@@ -77,9 +77,9 @@ type zoneResp struct {
 			ColoCode string `json:"coloCode"`
 		} `json:"dimensions"`
 		Count uint64 `json:"count"`
-		Sum struct {
+		Sum   struct {
 			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
-			Visits uint64 `json:"visits"`
+			Visits            uint64 `json:"visits"`
 		} `json:"sum"`
 		Avg struct {
 			sampleInterval uint64 `json:"sampleInterval"`
@@ -89,9 +89,10 @@ type zoneResp struct {
 	FirewallEventsAdaptiveGroups []struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
-			Action                   string `json:"action"`
-			ClientCountryName string `json:"clientCountryName"`
-			ClientRequestHTTPHost    string `json:"clientRequestHTTPHost"`
+			Action                string `json:"action"`
+			Source                string `json:"source"`
+			ClientCountryName     string `json:"clientCountryName"`
+			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
 	} `json:"firewallEventsAdaptiveGroups"`
 
