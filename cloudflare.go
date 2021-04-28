@@ -100,7 +100,8 @@ type zoneResp struct {
 
 func fetchZones() []cloudflare.Zone {
 
-	api, err := cloudflare.New(os.Getenv("CF_API_KEY"), os.Getenv("CF_API_EMAIL"))
+	api, err := cloudflare.NewWithAPIToken(os.Getenv("CF_API_TOKEN"))
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -192,8 +193,8 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 }
 `)
 
-	http1mGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
-	http1mGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
+	http1mGroups.Header.Set("Authorization", "Bearer " + os.Getenv("CF_API_TOKEN"))
+	http1mGroups.Header.Set("Content-Type", "application/json")
 	http1mGroups.Var("limit", 9999)
 	http1mGroups.Var("maxtime", now)
 	http1mGroups.Var("mintime", now1mAgo)
@@ -244,8 +245,8 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
 		}
 `)
 
-	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
-	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
+	httpRequestsAdaptiveGroups.Header.Set("Authorization", "Bearer " + os.Getenv("CF_API_TOKEN"))
+	httpRequestsAdaptiveGroups.Header.Set("Content-Type", "application/json")
 	httpRequestsAdaptiveGroups.Var("limit", 9999)
 	httpRequestsAdaptiveGroups.Var("maxtime", now)
 	httpRequestsAdaptiveGroups.Var("mintime", now1mAgo)
