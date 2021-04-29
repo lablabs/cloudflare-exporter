@@ -1,0 +1,19 @@
+repositories:
+  - name: "cloudflare-exporter"
+    url: "https://lablabs.github.io/cloudflare-exporter"
+
+releases:
+  - name: "cloudflare-exporter"
+    namespace: "monitoring"
+    version: "0.0.3"
+    chart: "cloudflare-exporter/cloudflare-exporter"
+    wait: true
+    values:
+      - env:
+        - name: CF_API_EMAIL
+          value: <YOUR_API_EMAIL>
+        - name: CF_API_KEY
+          value: <YOUR_API_KEY>
+        # Optionally, you can filter zones by their adding IDs following the example below.
+        # - name: ZONE_XYZ
+        #   value: <zone_id>
