@@ -32,9 +32,15 @@ The exporter can be configured using env variables
 
 | **KEY** | **description** |
 |-|-|
+| `LISTEN` |  listen on addr:port ( default :8080), omit addr to listen on all interfaces |
+| `METRICS_PATH` |  path for metrics, default /metrics |
 | `CF_API_KEY` |  API key |
 | `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
+| `CF_API_TOKEN` |  API authentification token (https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
 | `ZONE_<NAME>` |  (Optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. Defaults to all zones. |
+
+Another configuration options are command line flags, same as environmental variables but lowercase, zones are not supported as flag, see ./cloudflare_exporter --help
+
 
 ## List of available metrics
 
@@ -79,6 +85,10 @@ docker build -t lablabs/cloudflare_exporter .
 
 ```
 docker run --rm -p 8080:8080 -e CF_API_KEY=${CF_API_KEY} -e CF_API_EMAIL=${CF_API_EMAIL} lablabs/cloudflare_exporter
+```
+or
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} lablabs/cloudflare_exporter
 ```
 
 ## Contributing and reporting issues

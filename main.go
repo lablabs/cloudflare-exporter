@@ -8,8 +8,17 @@ import (
 	"time"
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/namsral/flag"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	cfg_listen       = ":8080"
+	cfg_cf_api_key   = ""
+	cfg_cf_api_email = ""
+	cfg_cf_api_token = ""
+	cfg_metrics_path = "/metrics"
 )
 
 func getTargetZones() []string {
@@ -67,6 +76,15 @@ func fetchMetrics() {
 }
 
 func main() {
+	flag.StringVar(&cfg_listen, "listen", cfg_listen, "listen on addr:port ( default :8080), omit addr to listen on all interfaces")
+	flag.StringVar(&cfg_metrics_path, "metrics_path", cfg_metrics_path, "path for metrics, default /metrics")
+	flag.StringVar(&cfg_cf_api_key, "cf_api_key", cfg_cf_api_key, "cloudflare api key, works with api_email flag")
+	flag.StringVar(&cfg_cf_api_email, "cf_api_email", cfg_cf_api_email, "cloudflare api email, works with api_key flag")
+	flag.StringVar(&cfg_cf_api_token, "cf_api_token", cfg_cf_api_token, "cloudflare api token (preferred)")
+	flag.Parse()
+	if !(len(cfg_cf_api_token) > 0 || (len(cfg_cf_api_email) > 0 && len(cfg_cf_api_key) > 0)) {
+		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
+	}
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	log.SetFormatter(customFormatter)
@@ -80,7 +98,10 @@ func main() {
 
 	//This section will start the HTTP server and expose
 	//any metrics on the /metrics endpoint.
-	http.Handle("/metrics", promhttp.Handler())
-	log.Info("Beginning to serve on port :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	if !strings.HasPrefix(cfg_metrics_path, "/") {
+		cfg_metrics_path = "/" + cfg_metrics_path
+	}
+	http.Handle(cfg_metrics_path, promhttp.Handler())
+	log.Info("Beginning to serve on port", cfg_listen, ", metrics path ", cfg_metrics_path)
+	log.Fatal(http.ListenAndServe(cfg_listen, nil))
 }
