@@ -102,6 +102,6 @@ func main() {
 		cfg_metrics_path = "/" + cfg_metrics_path
 	}
 	http.Handle(cfg_metrics_path, promhttp.Handler())
-	log.Info("Beginning to serve on port", cfg_listen, ", metrics path ", cfg_metrics_path)
+	log.Info("Beginning to serve on ", cfg_listen, ", metrics path ", cfg_metrics_path)
 	log.Fatal(http.ListenAndServe(cfg_listen, nil))
 }
