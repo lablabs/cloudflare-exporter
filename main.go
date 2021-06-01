@@ -8,16 +8,32 @@ import (
 	"time"
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/namsral/flag"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	cfgListen      = ":8080"
+	cfgCfAPIKey    = ""
+	cfgCfAPIEmail  = ""
+	cfgCfAPIToken  = ""
+	cfgMetricsPath = "/metrics"
+	cfgZones       = ""
+)
+
 func getTargetZones() []string {
 	var zoneIDs []string
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "ZONE_") {
-			split := strings.SplitN(e, "=", 2)
-			zoneIDs = append(zoneIDs, split[1])
+
+	if len(cfgZones) > 0 {
+		zoneIDs = strings.Split(cfgZones, ",")
+	} else {
+		//depricated
+		for _, e := range os.Environ() {
+			if strings.HasPrefix(e, "ZONE_") {
+				split := strings.SplitN(e, "=", 2)
+				zoneIDs = append(zoneIDs, split[1])
+			}
 		}
 	}
 	return zoneIDs
@@ -67,6 +83,16 @@ func fetchMetrics() {
 }
 
 func main() {
+	flag.StringVar(&cfgListen, "listen", cfgListen, "listen on addr:port ( default :8080), omit addr to listen on all interfaces")
+	flag.StringVar(&cfgMetricsPath, "metrics_path", cfgMetricsPath, "path for metrics, default /metrics")
+	flag.StringVar(&cfgCfAPIKey, "cf_api_key", cfgCfAPIKey, "cloudflare api key, works with api_email flag")
+	flag.StringVar(&cfgCfAPIEmail, "cf_api_email", cfgCfAPIEmail, "cloudflare api email, works with api_key flag")
+	flag.StringVar(&cfgCfAPIToken, "cf_api_token", cfgCfAPIToken, "cloudflare api token (preferred)")
+	flag.StringVar(&cfgZones, "cf_zones", cfgZones, "cloudflare zones to export, comma delimited list")
+	flag.Parse()
+	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
+		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
+	}
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	log.SetFormatter(customFormatter)
@@ -80,7 +106,10 @@ func main() {
 
 	//This section will start the HTTP server and expose
 	//any metrics on the /metrics endpoint.
-	http.Handle("/metrics", promhttp.Handler())
-	log.Info("Beginning to serve on port :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	if !strings.HasPrefix(cfgMetricsPath, "/") {
+		cfgMetricsPath = "/" + cfgMetricsPath
+	}
+	http.Handle(cfgMetricsPath, promhttp.Handler())
+	log.Info("Beginning to serve on port", cfgListen, ", metrics path ", cfgMetricsPath)
+	log.Fatal(http.ListenAndServe(cfgListen, nil))
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"time"
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
@@ -10,10 +9,39 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	cfGraphQLEndpoint = "https://api.cloudflare.com/client/v4/graphql/"
+)
+
 type cloudflareResponse struct {
 	Viewer struct {
 		Zones []zoneResp `json:"zones"`
 	} `json:"viewer"`
+}
+
+type cloudflareResponseColo struct {
+	Viewer struct {
+		Zones []zoneRespColo `json:"zones"`
+	} `json:"viewer"`
+}
+
+type zoneRespColo struct {
+	ColoGroups []struct {
+		Dimensions struct {
+			Datetime string `json:"datetime"`
+			ColoCode string `json:"coloCode"`
+		} `json:"dimensions"`
+		Count uint64 `json:"count"`
+		Sum   struct {
+			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
+			Visits            uint64 `json:"visits"`
+		} `json:"sum"`
+		Avg struct {
+			SampleInterval float64 `json:"sampleInterval"`
+		} `json:"avg"`
+	} `json:"httpRequestsAdaptiveGroups"`
+
+	ZoneTag string `json:"zoneTag"`
 }
 
 type zoneResp struct {
@@ -29,10 +57,9 @@ type zoneResp struct {
 			CachedBytes    uint64 `json:"cachedBytes"`
 			CachedRequests uint64 `json:"cachedRequests"`
 			Requests       uint64 `json:"requests"`
-
-			BrowserMap []struct {
+			BrowserMap     []struct {
 				PageViews       uint64 `json:"pageViews"`
-				uaBrowserFamily string `json:"uaBrowserFamily"`
+				UaBrowserFamily string `json:"uaBrowserFamily"`
 			} `json:"browserMap"`
 			ClientHTTPVersion []struct {
 				Protocol string `json:"clientHTTPProtocol"`
@@ -71,36 +98,45 @@ type zoneResp struct {
 		} `json:"sum"`
 	} `json:"httpRequests1mGroups"`
 
-	ColoGroups []struct {
-		Dimensions struct {
-			Datetime string `json:"datetime"`
-			ColoCode string `json:"coloCode"`
-		} `json:"dimensions"`
-		Count uint64 `json:"count"`
-		Sum struct {
-			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
-			Visits uint64 `json:"visits"`
-		} `json:"sum"`
-		Avg struct {
-			sampleInterval uint64 `json:"sampleInterval"`
-		} `json:"avg"`
-	} `json:"httpRequestsAdaptiveGroups"`
-
 	FirewallEventsAdaptiveGroups []struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
-			Action                   string `json:"action"`
-			ClientCountryName string `json:"clientCountryName"`
-			ClientRequestHTTPHost    string `json:"clientRequestHTTPHost"`
+			Action                string `json:"action"`
+			ClientCountryName     string `json:"clientCountryName"`
+			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
 	} `json:"firewallEventsAdaptiveGroups"`
+
+	HTTPRequestsAdaptiveGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			OriginResponseStatus uint16 `json:"originResponseStatus"`
+			ClientCountryName    string `json:"clientCountryName"`
+			ColoCode             string `json:"coloCode"`
+		} `json:"dimensions"`
+	} `json:"httpRequestsAdaptiveGroups"`
+
+	HealthCheckEventsAdaptiveGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			HealthStatus  string `json:"healthStatus"`
+			OriginIP      string `json:"originIP"`
+			FailureReason string `json:"failureReason"`
+			Region        string `json:"region"`
+		} `json:"dimensions"`
+	} `json:"healthCheckEventsAdaptiveGroups"`
 
 	ZoneTag string `json:"zoneTag"`
 }
 
 func fetchZones() []cloudflare.Zone {
-
-	api, err := cloudflare.New(os.Getenv("CF_API_KEY"), os.Getenv("CF_API_EMAIL"))
+	var api *cloudflare.API
+	var err error
+	if len(cfgCfAPIToken) > 0 {
+		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	} else {
+		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,7 +156,7 @@ func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
 
-	http1mGroups := graphql.NewRequest(`
+	request := graphql.NewRequest(`
 query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	viewer {
 		zones(filter: { zoneTag_in: $zoneIDs }) {
@@ -178,7 +214,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 					datetime
 				}
 			}
-			firewallEventsAdaptiveGroups(limit: $limit, filter: {datetime_geq: $mintime, datetime_lt: $maxtime}) {
+			firewallEventsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
 				count
 				dimensions {
 				  action	
@@ -187,23 +223,41 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 				  clientCountryName
 				}
 			}
+			httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime, originResponseStatus_gt: 0 }) {
+				count
+				dimensions {
+					originResponseStatus
+					clientCountryName
+				}
+			}
+			healthCheckEventsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
+				count
+				dimensions {
+					healthStatus
+					originIP
+					region
+				}
+			}
 		}
 	}
 }
 `)
-
-	http1mGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
-	http1mGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
-	http1mGroups.Var("limit", 9999)
-	http1mGroups.Var("maxtime", now)
-	http1mGroups.Var("mintime", now1mAgo)
-	http1mGroups.Var("zoneIDs", zoneIDs)
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
-	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 
 	var resp cloudflareResponse
-	if err := graphqlClient.Run(ctx, http1mGroups, &resp); err != nil {
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
 		log.Error(err)
 		return nil, err
 	}
@@ -211,13 +265,13 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	return &resp, nil
 }
 
-func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
+func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 	now := time.Now().Add(-180 * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
 
-	httpRequestsAdaptiveGroups := graphql.NewRequest(`
+	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
 			zones(filter: { zoneTag_in: $zoneIDs }) {
@@ -243,18 +297,21 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponse, error) {
 			}
 		}
 `)
-
-	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-EMAIL", os.Getenv("CF_API_EMAIL"))
-	httpRequestsAdaptiveGroups.Header.Set("X-AUTH-KEY", os.Getenv("CF_API_KEY"))
-	httpRequestsAdaptiveGroups.Var("limit", 9999)
-	httpRequestsAdaptiveGroups.Var("maxtime", now)
-	httpRequestsAdaptiveGroups.Var("mintime", now1mAgo)
-	httpRequestsAdaptiveGroups.Var("zoneIDs", zoneIDs)
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
-	graphqlClient := graphql.NewClient("https://api.cloudflare.com/client/v4/graphql/")
-	var resp cloudflareResponse
-	if err := graphqlClient.Run(ctx, httpRequestsAdaptiveGroups, &resp); err != nil {
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	var resp cloudflareResponseColo
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
 		log.Error(err)
 		return nil, err
 	}

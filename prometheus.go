@@ -60,6 +60,12 @@ var (
 	}, []string{"zone", "status"},
 	)
 
+	zoneRequestOriginStatusCountry = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_requests_origin_status_country",
+		Help: "Count of not cached requests for zone per origin HTTP status per country",
+	}, []string{"zone", "status", "country"},
+	)
+
 	zoneBandwidthTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_bandwidth_total",
 		Help: "Total bandwidth per zone in bytes",
@@ -153,12 +159,19 @@ var (
 	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_firewall_events_count",
 		Help: "Count of Firewall events",
-	}, []string{"zone", "action", "host", "country"})
+	}, []string{"zone", "action", "host", "country"},
+	)
+
+	zoneHealthCheckEventsOriginCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_health_check_events_origin_count",
+		Help: "Number of Heath check events per region per origin",
+	}, []string{"zone", "health_status", "origin_ip", "region"},
+	)
 )
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
-
+	defer wg.Done()
 	zoneIDs := extractZoneIDs(zones)
 
 	r, err := fetchColoTotals(zoneIDs)
@@ -175,8 +188,6 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.EdgeResponseBytes))
 		}
 	}
-
-	defer wg.Done()
 }
 
 func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -194,6 +205,8 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		name := findZoneName(zones, z.ZoneTag)
 		addHTTPGroups(&z, name)
 		addFirewallGroups(&z, name)
+		addHealthCheckGroups(&z, name)
+		addHTTPAdaptiveGroups(&z, name)
 	}
 }
 
@@ -251,10 +264,38 @@ func addFirewallGroups(z *zoneResp, name string) {
 	for _, g := range z.FirewallEventsAdaptiveGroups {
 		zoneFirewallEventsCount.With(
 			prometheus.Labels{
-				"zone":     name,
-				"action":   g.Dimensions.Action,
-				"host":     g.Dimensions.ClientRequestHTTPHost,
-				"country":  g.Dimensions.ClientCountryName,
+				"zone":    name,
+				"action":  g.Dimensions.Action,
+				"host":    g.Dimensions.ClientRequestHTTPHost,
+				"country": g.Dimensions.ClientCountryName,
+			}).Add(float64(g.Count))
+	}
+}
+
+func addHealthCheckGroups(z *zoneResp, name string) {
+	if len(z.HealthCheckEventsAdaptiveGroups) == 0 {
+		return
+	}
+
+	for _, g := range z.HealthCheckEventsAdaptiveGroups {
+		zoneHealthCheckEventsOriginCount.With(
+			prometheus.Labels{
+				"zone":          name,
+				"health_status": g.Dimensions.HealthStatus,
+				"origin_ip":     g.Dimensions.OriginIP,
+				"region":        g.Dimensions.Region,
+			}).Add(float64(g.Count))
+	}
+}
+
+func addHTTPAdaptiveGroups(z *zoneResp, name string) {
+
+	for _, g := range z.HTTPRequestsAdaptiveGroups {
+		zoneRequestOriginStatusCountry.With(
+			prometheus.Labels{
+				"zone":    name,
+				"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
+				"country": g.Dimensions.ClientCountryName,
 			}).Add(float64(g.Count))
 	}
 }

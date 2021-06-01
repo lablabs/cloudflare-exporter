@@ -32,9 +32,17 @@ The exporter can be configured using env variables
 
 | **KEY** | **description** |
 |-|-|
+| `LISTEN` |  listen on addr:port ( default :8080), omit addr to listen on all interfaces |
+| `METRICS_PATH` |  path for metrics, default /metrics |
 | `CF_API_KEY` |  API key |
 | `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
-| `ZONE_<NAME>` |  (Optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. Defaults to all zones. |
+| `CF_API_TOKEN` |  API authentification token (https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
+| `ZONE_<NAME>` |  DEPRICATED (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
+| `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids, if not set, all zones from account are exported |
+Defaults to all zones. |
+
+Another configuration options are command line flags, same as environmental variables but lowercase, zones are not supported as flag, see ./cloudflare_exporter --help
+
 
 ## List of available metrics
 
@@ -60,6 +68,8 @@ The exporter can be configured using env variables
 # HELP cloudflare_zone_threats_country Threats per zone per country
 # HELP cloudflare_zone_threats_total Threats per zone
 # HELP cloudflare_zone_firewall_events_count Count of Firewall events
+# HELP cloudflare_zone_requests_origin_status_country Count of not cached requests for zone per origin HTTP status per country
+# HELP cloudflare_zone_health_check_events_origin_count Number of Heath check events per region per origin
 ```
 
 
@@ -80,7 +90,18 @@ docker build -t lablabs/cloudflare_exporter .
 ```
 docker run --rm -p 8080:8080 -e CF_API_KEY=${CF_API_KEY} -e CF_API_EMAIL=${CF_API_EMAIL} lablabs/cloudflare_exporter
 ```
-
+or
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} lablabs/cloudflare_exporter
+```
+or example with selected zones and listen port
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 lablabs/cloudflare_exporter
+```
+help
+```
+docker run --rm -p 8080:8080 -i lablabs/cloudflare_exporter --help
+```
 ## Contributing and reporting issues
 
 Feel free to create an issue in this repository if you have questions, suggestions or feature requests.
