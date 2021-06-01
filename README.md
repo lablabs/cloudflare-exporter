@@ -37,11 +37,31 @@ The exporter can be configured using env variables
 | `CF_API_KEY` |  API key |
 | `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
 | `CF_API_TOKEN` |  API authentification token (https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
-| `ZONE_<NAME>` |  DEPRICATED (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
+| `ZONE_<NAME>` |  DEPRECATED (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
 | `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids, if not set, all zones from account are exported |
 Defaults to all zones. |
 
 Another configuration options are command line flags, same as environmental variables but lowercase, zones are not supported as flag, see ./cloudflare_exporter --help
+
+```
+  -cf_api_email="": cloudflare api email, works with api_key flag
+  -cf_api_key="": cloudflare api key, works with api_email flag
+  -cf_api_token="": cloudflare api token (preferred)
+  -cf_zones="": cloudflare zones to export, comma delimited list
+  -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
+  -metrics_path="/metrics": path for metrics, default /metrics
+```
+
+### Changes in in version 0.0.5+
+
+## Authentication
+
+From version 0.0.5 onward authentication using Bearer token is supported. Authentication using API key and email will continue working in later versions as well. The token authentication method is preferred.
+
+## Zone filtering
+
+The original method of zone filtering by using env variables `ZONE_<name>` is now deprecated. Zones can be filtered by using `CF_ZONES` env variable and setting the value as list of zones separated by a comma (CF_ZONES=zone1,zone2,zone3).
+
 
 
 ## List of available metrics
