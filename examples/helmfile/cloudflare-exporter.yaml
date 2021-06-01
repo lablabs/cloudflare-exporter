@@ -14,6 +14,9 @@ releases:
           value: <YOUR_API_EMAIL>
         - name: CF_API_KEY
           value: <YOUR_API_KEY>
-        # Optionally, you can filter zones by their adding IDs following the example below.
+        # Optionally select zones
+        # - name: CF_ZONES
+        #   value: "<zone_id1>,<zone_id2>,..."
+        # DEPRICATED Optionally, you can filter zones by their adding IDs following the example below.
         # - name: ZONE_XYZ
         #   value: <zone_id>

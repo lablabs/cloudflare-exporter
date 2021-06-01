@@ -14,19 +14,26 @@ import (
 )
 
 var (
-	cfg_listen       = ":8080"
-	cfg_cf_api_key   = ""
-	cfg_cf_api_email = ""
-	cfg_cf_api_token = ""
-	cfg_metrics_path = "/metrics"
+	cfgListen      = ":8080"
+	cfgCfAPIKey    = ""
+	cfgCfAPIEmail  = ""
+	cfgCfAPIToken  = ""
+	cfgMetricsPath = "/metrics"
+	cfgZones       = ""
 )
 
 func getTargetZones() []string {
 	var zoneIDs []string
-	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "ZONE_") {
-			split := strings.SplitN(e, "=", 2)
-			zoneIDs = append(zoneIDs, split[1])
+
+	if len(cfgZones) > 0 {
+		zoneIDs = strings.Split(cfgZones, ",")
+	} else {
+		//depricated
+		for _, e := range os.Environ() {
+			if strings.HasPrefix(e, "ZONE_") {
+				split := strings.SplitN(e, "=", 2)
+				zoneIDs = append(zoneIDs, split[1])
+			}
 		}
 	}
 	return zoneIDs
@@ -76,13 +83,14 @@ func fetchMetrics() {
 }
 
 func main() {
-	flag.StringVar(&cfg_listen, "listen", cfg_listen, "listen on addr:port ( default :8080), omit addr to listen on all interfaces")
-	flag.StringVar(&cfg_metrics_path, "metrics_path", cfg_metrics_path, "path for metrics, default /metrics")
-	flag.StringVar(&cfg_cf_api_key, "cf_api_key", cfg_cf_api_key, "cloudflare api key, works with api_email flag")
-	flag.StringVar(&cfg_cf_api_email, "cf_api_email", cfg_cf_api_email, "cloudflare api email, works with api_key flag")
-	flag.StringVar(&cfg_cf_api_token, "cf_api_token", cfg_cf_api_token, "cloudflare api token (preferred)")
+	flag.StringVar(&cfgListen, "listen", cfgListen, "listen on addr:port ( default :8080), omit addr to listen on all interfaces")
+	flag.StringVar(&cfgMetricsPath, "metrics_path", cfgMetricsPath, "path for metrics, default /metrics")
+	flag.StringVar(&cfgCfAPIKey, "cf_api_key", cfgCfAPIKey, "cloudflare api key, works with api_email flag")
+	flag.StringVar(&cfgCfAPIEmail, "cf_api_email", cfgCfAPIEmail, "cloudflare api email, works with api_key flag")
+	flag.StringVar(&cfgCfAPIToken, "cf_api_token", cfgCfAPIToken, "cloudflare api token (preferred)")
+	flag.StringVar(&cfgZones, "cf_zones", cfgZones, "cloudflare zones to export, comma delimited list")
 	flag.Parse()
-	if !(len(cfg_cf_api_token) > 0 || (len(cfg_cf_api_email) > 0 && len(cfg_cf_api_key) > 0)) {
+	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
 	}
 	customFormatter := new(log.TextFormatter)
@@ -98,10 +106,10 @@ func main() {
 
 	//This section will start the HTTP server and expose
 	//any metrics on the /metrics endpoint.
-	if !strings.HasPrefix(cfg_metrics_path, "/") {
-		cfg_metrics_path = "/" + cfg_metrics_path
+	if !strings.HasPrefix(cfgMetricsPath, "/") {
+		cfgMetricsPath = "/" + cfgMetricsPath
 	}
-	http.Handle(cfg_metrics_path, promhttp.Handler())
-	log.Info("Beginning to serve on ", cfg_listen, ", metrics path ", cfg_metrics_path)
-	log.Fatal(http.ListenAndServe(cfg_listen, nil))
+	http.Handle(cfgMetricsPath, promhttp.Handler())
+	log.Info("Beginning to serve on port", cfgListen, ", metrics path ", cfgMetricsPath)
+	log.Fatal(http.ListenAndServe(cfgListen, nil))
 }
