@@ -50,3 +50,13 @@ app.kubernetes.io/name: {{ include "cloudflare-exporter.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "cloudflare-exporter.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "cloudflare-exporter.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
