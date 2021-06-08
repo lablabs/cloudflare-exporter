@@ -60,10 +60,16 @@ var (
 	}, []string{"zone", "status"},
 	)
 
-	zoneRequestOriginStatusCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_origin_status_country",
-		Help: "Count of not cached requests for zone per origin HTTP status per country",
-	}, []string{"zone", "status", "country"},
+	zoneRequestOriginStatusCountryHost = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_requests_origin_status_country_host",
+		Help: "Count of not cached requests for zone per origin HTTP status per country per host",
+	}, []string{"zone", "status", "country", "host"},
+	)
+
+	zoneRequestStatusCountryHost = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_requests_status_country_host",
+		Help: "Count of requests for zone per edge HTTP status per country per host",
+	}, []string{"zone", "status", "country", "host"},
 	)
 
 	zoneBandwidthTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -291,11 +297,23 @@ func addHealthCheckGroups(z *zoneResp, name string) {
 func addHTTPAdaptiveGroups(z *zoneResp, name string) {
 
 	for _, g := range z.HTTPRequestsAdaptiveGroups {
-		zoneRequestOriginStatusCountry.With(
+		zoneRequestOriginStatusCountryHost.With(
 			prometheus.Labels{
 				"zone":    name,
 				"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
 				"country": g.Dimensions.ClientCountryName,
+				"host":    g.Dimensions.ClientRequestHTTPHost,
 			}).Add(float64(g.Count))
 	}
+
+	for _, g := range z.HTTPRequestsEdgeCountryHost {
+		zoneRequestStatusCountryHost.With(
+			prometheus.Labels{
+				"zone":    name,
+				"status":  strconv.Itoa(int(g.Dimensions.EdgeResponseStatus)),
+				"country": g.Dimensions.ClientCountryName,
+				"host":    g.Dimensions.ClientRequestHTTPHost,
+			}).Add(float64(g.Count))
+	}
+
 }
