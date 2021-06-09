@@ -8,7 +8,7 @@ image:
   repository: lablabs/cloudflare_exporter
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: 0.0.2
+  # tag: latest
 env: []
 imagePullSecrets: []
 nameOverride: ""
@@ -30,8 +30,8 @@ securityContext: {}
 service:
   type: ClusterIP
   port: 8080
-  annotations:
-    prometheus.io/probe: "true"
+  annotations: {}
+  addPrometheusScrapeAnnotation: true
 
 serviceAccount:
   # Whether to create service account
