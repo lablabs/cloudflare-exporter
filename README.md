@@ -72,24 +72,20 @@ The original method of zone filtering by using env variables `ZONE_<name>` is no
 # HELP cloudflare_zone_bandwidth_country Bandwidth per country per zone
 # HELP cloudflare_zone_bandwidth_ssl_encrypted Encrypted bandwidth per zone in bytes
 # HELP cloudflare_zone_bandwidth_total Total bandwidth per zone in bytes
-# HELP cloudflare_zone_colocation_bandwidth_cached Total cached bandwidth per colocation
-# HELP cloudflare_zone_colocation_bandwidth_total Total bandwidth per colocation
-# HELP cloudflare_zone_colocation_requests_cached Total cached requests per colocation
-# HELP cloudflare_zone_colocation_requests_country Requests per colocation per country
-# HELP cloudflare_zone_colocation_requests_total Total requests per colocation
-# HELP cloudflare_zone_colocation_response_status HTTP response status per colocation
+# HELP cloudflare_zone_colocation_edge_response_bytes Edge response bytes per colocation
+# HELP cloudflare_zone_colocation_visits Total visits per colocation
 # HELP cloudflare_zone_pageviews_total Pageviews per zone
 # HELP cloudflare_zone_requests_cached Number of cached requests for zone
 # HELP cloudflare_zone_requests_content_type Number of request for zone per content type
 # HELP cloudflare_zone_requests_country Number of request for zone per country
+# HELP cloudflare_zone_requests_origin_status_country_host Count of not cached requests for zone per origin HTTP status per country per host
 # HELP cloudflare_zone_requests_ssl_encrypted Number of encrypted requests for zone
 # HELP cloudflare_zone_requests_status Number of request for zone per HTTP status
+# HELP cloudflare_zone_requests_status_country_host Count of requests for zone per edge HTTP status per country per host
 # HELP cloudflare_zone_requests_total Number of requests for zone
 # HELP cloudflare_zone_threats_country Threats per zone per country
 # HELP cloudflare_zone_threats_total Threats per zone
-# HELP cloudflare_zone_firewall_events_count Count of Firewall events
-# HELP cloudflare_zone_requests_origin_status_country Count of not cached requests for zone per origin HTTP status per country
-# HELP cloudflare_zone_health_check_events_origin_count Number of Heath check events per region per origin
+# HELP cloudflare_zone_uniques_total Uniques per zone
 ```
 
 
@@ -116,7 +112,7 @@ docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} lablabs/cloudflare_
 ```
 or example with selected zones and listen port
 ```
-docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 lablabs/cloudflare_exporter
+docker run --rm -p 8080:8081 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 lablabs/cloudflare_exporter
 ```
 help
 ```

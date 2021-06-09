@@ -110,11 +110,20 @@ type zoneResp struct {
 	HTTPRequestsAdaptiveGroups []struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
-			OriginResponseStatus uint16 `json:"originResponseStatus"`
-			ClientCountryName    string `json:"clientCountryName"`
-			ColoCode             string `json:"coloCode"`
+			OriginResponseStatus  uint16 `json:"originResponseStatus"`
+			ClientCountryName     string `json:"clientCountryName"`
+			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
 	} `json:"httpRequestsAdaptiveGroups"`
+
+	HTTPRequestsEdgeCountryHost []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			EdgeResponseStatus    uint16 `json:"edgeResponseStatus"`
+			ClientCountryName     string `json:"clientCountryName"`
+			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
+		} `json:"dimensions"`
+	} `json:"httpRequestsEdgeCountryHost"`
 
 	HealthCheckEventsAdaptiveGroups []struct {
 		Count      uint64 `json:"count"`
@@ -223,11 +232,20 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 				  clientCountryName
 				}
 			}
-			httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime, originResponseStatus_gt: 0 }) {
+			httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime, cacheStatus_notin: ["hit"] }) {
 				count
 				dimensions {
 					originResponseStatus
 					clientCountryName
+					clientRequestHTTPHost
+				}
+			}
+			httpRequestsEdgeCountryHost: httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
+				count
+				dimensions {
+					edgeResponseStatus
+					clientCountryName
+					clientRequestHTTPHost
 				}
 			}
 			healthCheckEventsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
