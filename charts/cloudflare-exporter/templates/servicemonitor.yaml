@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "cloudflare-exporter.labels" . | nindent 4 }}
   {{- if .Values.serviceMonitor.labels }}
-    {{ toYaml .Values.serviceMonitor.labels | indent 4 }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
   {{- end }}
   name: {{ template "cloudflare-exporter.fullname" . }}
 {{- if .Values.serviceMonitor.namespace }}
