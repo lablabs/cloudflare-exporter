@@ -102,6 +102,7 @@ type zoneResp struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
 			Action                string `json:"action"`
+			Source                string `json:"source"`
 			ClientCountryName     string `json:"clientCountryName"`
 			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`

@@ -165,7 +165,7 @@ var (
 	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_firewall_events_count",
 		Help: "Count of Firewall events",
-	}, []string{"zone", "action", "host", "country"},
+	}, []string{"zone", "action", "source", "host", "country"},
 	)
 
 	zoneHealthCheckEventsOriginCount = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -272,6 +272,7 @@ func addFirewallGroups(z *zoneResp, name string) {
 			prometheus.Labels{
 				"zone":    name,
 				"action":  g.Dimensions.Action,
+				"source":  g.Dimensions.Source,
 				"host":    g.Dimensions.ClientRequestHTTPHost,
 				"country": g.Dimensions.ClientCountryName,
 			}).Add(float64(g.Count))
