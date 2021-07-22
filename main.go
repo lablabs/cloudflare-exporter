@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/namsral/flag"
+	"github.com/nelkinda/health-go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
@@ -83,6 +85,13 @@ func fetchMetrics() {
 	wg.Wait()
 }
 
+func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	// A very simple health check.
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	io.WriteString(w, `{"alive": true}`)
+}
+
 func main() {
 	flag.StringVar(&cfgListen, "listen", cfgListen, "listen on addr:port ( default :8080), omit addr to listen on all interfaces")
 	flag.StringVar(&cfgMetricsPath, "metrics_path", cfgMetricsPath, "path for metrics, default /metrics")
@@ -112,6 +121,8 @@ func main() {
 		cfgMetricsPath = "/" + cfgMetricsPath
 	}
 	http.Handle(cfgMetricsPath, promhttp.Handler())
+	h := health.New(health.Health{})
+	http.HandleFunc("/health", h.Handler)
 	log.Info("Beginning to serve on port", cfgListen, ", metrics path ", cfgMetricsPath)
 	log.Fatal(http.ListenAndServe(cfgListen, nil))
 }
