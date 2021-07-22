@@ -50,6 +50,7 @@ Another configuration options are command line flags, same as environmental vari
   -cf_zones="": cloudflare zones to export, comma delimited list
   -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
   -metrics_path="/metrics": path for metrics, default /metrics
+  -scrape_delay=300: scrape delay in seconds, defaults to 300
 ```
 
 ### Changes in in version 0.0.5+

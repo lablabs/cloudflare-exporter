@@ -20,6 +20,7 @@ var (
 	cfgCfAPIToken  = ""
 	cfgMetricsPath = "/metrics"
 	cfgZones       = ""
+	cfgScrapeDelay = 300
 )
 
 func getTargetZones() []string {
@@ -89,6 +90,7 @@ func main() {
 	flag.StringVar(&cfgCfAPIEmail, "cf_api_email", cfgCfAPIEmail, "cloudflare api email, works with api_key flag")
 	flag.StringVar(&cfgCfAPIToken, "cf_api_token", cfgCfAPIToken, "cloudflare api token (preferred)")
 	flag.StringVar(&cfgZones, "cf_zones", cfgZones, "cloudflare zones to export, comma delimited list")
+	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay , "scrape delay in seconds, defaults to 180")
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
