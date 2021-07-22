@@ -161,7 +161,7 @@ func fetchZones() []cloudflare.Zone {
 }
 
 func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
-	now := time.Now().Add(-180 * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -227,7 +227,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 			firewallEventsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
 				count
 				dimensions {
-				  action	
+				  action
 				  source
 				  clientRequestHTTPHost
 				  clientCountryName
@@ -285,7 +285,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 }
 
 func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
-	now := time.Now().Add(-180 * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
