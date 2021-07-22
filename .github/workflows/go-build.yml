@@ -1,12 +1,8 @@
 name: Generate release-artifacts
-
-on: [pull_request]
-
-# on:
-#   release:
-#     types:
-#         - created
-
+on:
+  release:
+    types:
+        - created
 jobs:
   generate:
     name: Generate cross-platform builds
@@ -22,9 +18,9 @@ jobs:
             name: 'cloudflare-exporter'
             compress: 'false'
             dest: 'dist'
-      # - name: Copy build-artifacts
-      #   uses: skx/github-action-publish-binaries@master
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   with:
-      #     args: "./dist/*"
+      - name: Copy build-artifacts
+        uses: skx/github-action-publish-binaries@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: "./dist/*"
