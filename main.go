@@ -9,6 +9,7 @@ import (
 
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/namsral/flag"
+	"github.com/nelkinda/health-go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
@@ -112,6 +113,8 @@ func main() {
 		cfgMetricsPath = "/" + cfgMetricsPath
 	}
 	http.Handle(cfgMetricsPath, promhttp.Handler())
+	h := health.New(health.Health{})
+	http.HandleFunc("/health", h.Handler)
 	log.Info("Beginning to serve on port", cfgListen, ", metrics path ", cfgMetricsPath)
 	log.Fatal(http.ListenAndServe(cfgListen, nil))
 }
