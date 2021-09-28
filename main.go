@@ -63,8 +63,13 @@ func filterZones(all []cloudflare.Zone, target []string) []cloudflare.Zone {
 func fetchMetrics() {
 	var wg sync.WaitGroup
 	zones := fetchZones()
+	accounts := fetchAccounts()
 
 	filteredZones := filterZones(zones, getTargetZones())
+
+	for _, a := range accounts {
+		go fetchWorkerAnalytics(a, &wg)
+	}
 
 	// Make requests in groups of 10 to avoid rate limit
 	// 10 is the maximum amount of zones you can request at once

@@ -8,7 +8,7 @@ We help companies build, run, deploy and scale software and infrastructure by em
 
 ## Description
 
-Prometheus exporter exposing Cloudflare Analytics dashboard data on per-zone basis.
+Prometheus exporter exposing Cloudflare Analytics dashboard data on a per-zone basis, as well as Worker metrics.
 The exporter is also able to scrape Zone metrics by Colocations (https://www.cloudflare.com/network/).
 
 ## Grafana Dashboard
@@ -68,6 +68,8 @@ The original method of zone filtering by using env variables `ZONE_<name>` is no
 ## List of available metrics
 
 ```
+# HELP cloudflare_worker_errors_count Number of errors by script name
+# HELP cloudflare_worker_requests_count Number of requests sent to worker by script name
 # HELP cloudflare_zone_bandwidth_cached Cached bandwidth per zone in bytes
 # HELP cloudflare_zone_bandwidth_content_type Bandwidth per zone per content type
 # HELP cloudflare_zone_bandwidth_country Bandwidth per country per zone

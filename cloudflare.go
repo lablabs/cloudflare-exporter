@@ -19,10 +19,31 @@ type cloudflareResponse struct {
 	} `json:"viewer"`
 }
 
+type cloudflareResponseAccts struct {
+	Viewer struct {
+		Accounts []accountResp `json:"accounts"`
+	} `json:"viewer"`
+}
+
 type cloudflareResponseColo struct {
 	Viewer struct {
 		Zones []zoneRespColo `json:"zones"`
 	} `json:"viewer"`
+}
+
+type accountResp struct {
+	WorkersInvocationsAdaptive []struct {
+		Dimensions struct {
+			ScriptName string `json:"scriptName"`
+			Status     string `json:"status"`
+		}
+
+		Sum struct {
+			Requests uint64  `json:"requests"`
+			Errors   uint64  `json:"errors"`
+			Duration float64 `json:"duration"`
+		} `json:"sum"`
+	} `json:"workersInvocationsAdaptive"`
 }
 
 type zoneRespColo struct {
@@ -158,7 +179,26 @@ func fetchZones() []cloudflare.Zone {
 	}
 
 	return z
+}
 
+func fetchAccounts() []cloudflare.Account {
+	var api *cloudflare.API
+	var err error
+	if len(cfgCfAPIToken) > 0 {
+		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	} else {
+		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	a, _, err := api.Accounts(cloudflare.PaginationOptions{PerPage: 100})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return a
 }
 
 func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
@@ -332,6 +372,55 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 	var resp cloudflareResponseColo
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
+	now := time.Now().Add(-180 * time.Second).UTC()
+	s := 60 * time.Second
+	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
+
+	request := graphql.NewRequest(`
+	query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+		viewer {
+			accounts(filter: {accountTag: $accountID} ) {
+				workersInvocationsAdaptive(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime}) {
+					dimensions {
+						scriptName
+						status
+						datetime
+					}
+
+					sum {
+						requests
+						errors
+						duration
+					}
+				}
+			}
+		}
+	}
+`)
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("accountID", accountID)
+
+	ctx := context.Background()
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	var resp cloudflareResponseAccts
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
 		log.Error(err)
 		return nil, err

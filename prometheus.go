@@ -173,7 +173,36 @@ var (
 		Help: "Number of Heath check events per region per origin",
 	}, []string{"zone", "health_status", "origin_ip", "region", "fqdn"},
 	)
+
+	workerRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_worker_requests_count",
+		Help: "Number of requests sent to worker by script name",
+	}, []string{"script_name"},
+	)
+
+	workerErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_worker_errors_count",
+		Help: "Number of errors by script name",
+	}, []string{"script_name"},
+	)
 )
+
+func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	r, err := fetchWorkerTotals(account.ID)
+	if err != nil {
+		return
+	}
+
+	for _, a := range r.Viewer.Accounts {
+		for _, w := range a.WorkersInvocationsAdaptive {
+			workerRequests.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Requests))
+			workerErrors.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Errors))
+		}
+	}
+}
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
