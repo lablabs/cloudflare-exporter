@@ -133,6 +133,7 @@ type zoneResp struct {
 			OriginIP      string `json:"originIP"`
 			FailureReason string `json:"failureReason"`
 			Region        string `json:"region"`
+			Fqdn          string `json:"fqdn"`
 		} `json:"dimensions"`
 	} `json:"healthCheckEventsAdaptiveGroups"`
 
@@ -255,6 +256,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 					healthStatus
 					originIP
 					region
+					fqdn
 				}
 			}
 		}

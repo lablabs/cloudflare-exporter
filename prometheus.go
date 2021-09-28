@@ -171,7 +171,7 @@ var (
 	zoneHealthCheckEventsOriginCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_health_check_events_origin_count",
 		Help: "Number of Heath check events per region per origin",
-	}, []string{"zone", "health_status", "origin_ip", "region"},
+	}, []string{"zone", "health_status", "origin_ip", "region", "fqdn"},
 	)
 )
 
@@ -291,6 +291,7 @@ func addHealthCheckGroups(z *zoneResp, name string) {
 				"health_status": g.Dimensions.HealthStatus,
 				"origin_ip":     g.Dimensions.OriginIP,
 				"region":        g.Dimensions.Region,
+				"fqdn":          g.Dimensions.Fqdn,
 			}).Add(float64(g.Count))
 	}
 }
