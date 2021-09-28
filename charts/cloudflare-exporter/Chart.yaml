@@ -1,7 +1,7 @@
 apiVersion: v2
 name: cloudflare-exporter
-version: 0.1.4
-appVersion: 0.0.7
+version: 0.1.5
+appVersion: 0.0.8
 home: https://github.com/lablabs/cloudflare-exporter
 description: A Helm chart for cloudflare exporter
 icon: https://www.cloudflare.com/img/logo-web-badges/cf-logo-on-white-bg.svg
