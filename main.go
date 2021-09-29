@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/namsral/flag"
 	"github.com/nelkinda/health-go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,6 +22,7 @@ var (
 	cfgMetricsPath = "/metrics"
 	cfgZones       = ""
 	cfgScrapeDelay = 300
+	cfgFreeTier    = false
 )
 
 func getTargetZones() []string {
@@ -30,7 +31,7 @@ func getTargetZones() []string {
 	if len(cfgZones) > 0 {
 		zoneIDs = strings.Split(cfgZones, ",")
 	} else {
-		//depricated
+		// deprecated
 		for _, e := range os.Environ() {
 			if strings.HasPrefix(e, "ZONE_") {
 				split := strings.SplitN(e, "=", 2)
@@ -64,7 +65,6 @@ func fetchMetrics() {
 	var wg sync.WaitGroup
 	zones := fetchZones()
 	accounts := fetchAccounts()
-
 	filteredZones := filterZones(zones, getTargetZones())
 
 	for _, a := range accounts {
@@ -96,7 +96,8 @@ func main() {
 	flag.StringVar(&cfgCfAPIEmail, "cf_api_email", cfgCfAPIEmail, "cloudflare api email, works with api_key flag")
 	flag.StringVar(&cfgCfAPIToken, "cf_api_token", cfgCfAPIToken, "cloudflare api token (preferred)")
 	flag.StringVar(&cfgZones, "cf_zones", cfgZones, "cloudflare zones to export, comma delimited list")
-	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay , "scrape delay in seconds, defaults to 300")
+	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay, "scrape delay in seconds, defaults to 300")
+	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")

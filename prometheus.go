@@ -185,6 +185,18 @@ var (
 		Help: "Number of errors by script name",
 	}, []string{"script_name"},
 	)
+
+	workerCpuTime = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cloudflare_worker_cpu_time",
+		Help: "CPU time quantiles by script name",
+	}, []string{"script_name", "quantile"},
+	)
+
+	workerDuration = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cloudflare_worker_duration",
+		Help: "Duration quantiles by script name (GB*s)",
+	}, []string{"script_name", "quantile"},
+	)
 )
 
 func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
@@ -200,6 +212,14 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 		for _, w := range a.WorkersInvocationsAdaptive {
 			workerRequests.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Requests))
 			workerErrors.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Errors))
+			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P50"}).Set(float64(w.Quantiles.CpuTimeP50))
+			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P75"}).Set(float64(w.Quantiles.CpuTimeP75))
+			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P99"}).Set(float64(w.Quantiles.CpuTimeP99))
+			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P999"}).Set(float64(w.Quantiles.CpuTimeP999))
+			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P50"}).Set(float64(w.Quantiles.DurationP50))
+			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P75"}).Set(float64(w.Quantiles.DurationP75))
+			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P99"}).Set(float64(w.Quantiles.DurationP99))
+			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P999"}).Set(float64(w.Quantiles.DurationP999))
 		}
 	}
 }
@@ -207,6 +227,11 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
+
+	// Colocation metrics are not available in non-enterprise zones
+	if cfgFreeTier {
+		return
+	}
 	zoneIDs := extractZoneIDs(zones)
 
 	r, err := fetchColoTotals(zoneIDs)
@@ -228,6 +253,11 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
+
+	// None of the below referenced metrics are available in the free tier
+	if cfgFreeTier {
+		return
+	}
 
 	zoneIDs := extractZoneIDs(zones)
 
