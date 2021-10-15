@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	cloudflare "github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/machinebox/graphql"
 	log "github.com/sirupsen/logrus"
 )
@@ -43,6 +43,17 @@ type accountResp struct {
 			Errors   uint64  `json:"errors"`
 			Duration float64 `json:"duration"`
 		} `json:"sum"`
+
+		Quantiles struct {
+			CpuTimeP50   float32 `json:"cpuTimeP50"`
+			CpuTimeP75   float32 `json:"cpuTimeP75"`
+			CpuTimeP99   float32 `json:"cpuTimeP99"`
+			CpuTimeP999  float32 `json:"cpuTimeP999"`
+			DurationP50  float32 `json:"durationP50"`
+			DurationP75  float32 `json:"durationP75"`
+			DurationP99  float32 `json:"durationP99"`
+			DurationP999 float32 `json:"durationP999"`
+		} `json:"quantiles"`
 	} `json:"workersInvocationsAdaptive"`
 }
 
@@ -401,6 +412,17 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 						requests
 						errors
 						duration
+					}
+
+					quantiles {
+						cpuTimeP50
+						cpuTimeP75
+						cpuTimeP99
+						cpuTimeP999
+						durationP50
+						durationP75
+						durationP99
+						durationP999
 					}
 				}
 			}

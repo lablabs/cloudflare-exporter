@@ -68,6 +68,8 @@ The original method of zone filtering by using env variables `ZONE_<name>` is no
 ## List of available metrics
 
 ```
+# HELP cloudflare_worker_cpu_time CPU time quantiles by script name
+# HELP cloudflare_worker_duration Duration quantiles by script name (GB*s)
 # HELP cloudflare_worker_errors_count Number of errors by script name
 # HELP cloudflare_worker_requests_count Number of requests sent to worker by script name
 # HELP cloudflare_zone_bandwidth_cached Cached bandwidth per zone in bytes
