@@ -184,7 +184,8 @@ func fetchZones() []cloudflare.Zone {
 		log.Fatal(err)
 	}
 
-	z, err := api.ListZones()
+	ctx := context.Background()
+	z, err := api.ListZones(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -204,7 +205,8 @@ func fetchAccounts() []cloudflare.Account {
 		log.Fatal(err)
 	}
 
-	a, _, err := api.Accounts(cloudflare.PaginationOptions{PerPage: 100})
+	ctx := context.Background()
+	a, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{PerPage: 100})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -392,7 +394,7 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 }
 
 func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
-	now := time.Now().Add(-180 * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)

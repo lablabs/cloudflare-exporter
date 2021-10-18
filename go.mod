@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/biter777/countries v1.3.2
-	github.com/cloudflare/cloudflare-go v0.13.2
+	github.com/cloudflare/cloudflare-go v0.25.0
 	github.com/machinebox/graphql v0.2.2
 	github.com/matryer/is v1.4.0 // indirect
 	github.com/namsral/flag v1.7.4-pre
