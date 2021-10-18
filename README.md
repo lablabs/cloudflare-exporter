@@ -1,5 +1,4 @@
 # CloudFlare Prometheus exporter
-
 [<img src="ll-logo.png">](https://lablabs.io/)
 
 We help companies build, run, deploy and scale software and infrastructure by embracing the right technologies and principles. Check out our website at https://lablabs.io/
@@ -7,66 +6,66 @@ We help companies build, run, deploy and scale software and infrastructure by em
 ---
 
 ## Description
-
 Prometheus exporter exposing Cloudflare Analytics dashboard data on a per-zone basis, as well as Worker metrics.
 The exporter is also able to scrape Zone metrics by Colocations (https://www.cloudflare.com/network/).
 
 ## Grafana Dashboard
-
 ![Dashboard](https://i.ibb.co/HDsqDF1/cf-exporter.png)
 
 Our public dashboard is available at https://grafana.com/grafana/dashboards/13133
 
-## Helm chart repository
 
-To deploy the exporter into Kubernetes, we recommend to use our manager Helm repository at
+## Authentication
+Authentication towards the Cloudflare API can be done in two ways:
 
-```
-helm repo add cloudflare-exporter https://lablabs.github.io/cloudflare-exporter/
-helm install cloudflare-exporter/cloudflare-exporter
-```
+### API token
+The preferred way of authenticating is with an API token, for which the scope can be configured at the Cloudflare
+dashboard.
+
+Required authentication scopes:
+- `Analytics:Read` is required for zone-level metrics
+- `Account.Account Analytics:Read` is required for Worker metrics
+- `Account Settings:Read` is required for Worker metrics (for listing accessible accounts, scraping all available
+  Workers included in authentication scope)
+
+To authenticate this way, only set `CF_API_TOKEN` (omit `CF_API_EMAIL` and `CF_API_KEY`)
+
+### User email + API key
+To authenticate with user email + API key, use the `Global API Key` from the Cloudflare dashboard.
+Beware that this key authenticates with write access to every Cloudflare resource.
+
+To authenticate this way, set both `CF_API_KEY` and `CF_API_EMAIL`.
 
 ## Configuration
-
-The exporter can be configured using env variables
+The exporter can be configured using env variables or command flags.
 
 | **KEY** | **description** |
 |-|-|
-| `LISTEN` |  listen on addr:port ( default :8080), omit addr to listen on all interfaces |
-| `METRICS_PATH` |  path for metrics, default /metrics |
-| `CF_API_KEY` |  API key |
-| `CF_API_EMAIL` |  email associated with the API key (https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
-| `CF_API_TOKEN` |  API authentification token (https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
-| `ZONE_<NAME>` |  DEPRECATED (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
-| `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids, if not set, all zones from account are exported |
-Defaults to all zones. |
+| `CF_API_EMAIL` |  user email (see https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
+| `CF_API_KEY` |  API key associated with email (`CF_API_EMAIL` is required if this is set)|
+| `CF_API_TOKEN` |  API authentication token (recommended before API key + email. Version 0.0.5+. see https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
+| `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids. If not set, all zones from account are exported |
+| `FREE_TIER` | (Optional) scrape only metrics included in free plan. Accepts `true` or `false`, default `false`. |
+| `LISTEN` |  listen on addr:port (default `:8080`), omit addr to listen on all interfaces |
+| `METRICS_PATH` |  path for metrics, default `/metrics` |
+| `SCRAPE_DELAY` | scrape delay in seconds, default `300`
+| `ZONE_<NAME>` |  `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
 
-Another configuration options are command line flags, same as environmental variables but lowercase, zones are not supported as flag, see ./cloudflare_exporter --help
-
+Corresponding flags:
 ```
   -cf_api_email="": cloudflare api email, works with api_key flag
   -cf_api_key="": cloudflare api key, works with api_email flag
-  -cf_api_token="": cloudflare api token (preferred)
+  -cf_api_token="": cloudflare api token (version 0.0.5+, preferred)
   -cf_zones="": cloudflare zones to export, comma delimited list
+  -free_tier=false: scrape only metrics included in free plan, default false
   -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
   -metrics_path="/metrics": path for metrics, default /metrics
   -scrape_delay=300: scrape delay in seconds, defaults to 300
 ```
 
-### Changes in in version 0.0.5+
-
-## Authentication
-
-From version 0.0.5 onward authentication using Bearer token is supported. Authentication using API key and email will continue working in later versions as well. The token authentication method is preferred.
-
-## Zone filtering
-
-The original method of zone filtering by using env variables `ZONE_<name>` is now deprecated. Zones can be filtered by using `CF_ZONES` env variable and setting the value as list of zones separated by a comma (CF_ZONES=zone1,zone2,zone3).
-
-
+Note: `ZONE_<name>` configuration is not supported as flag.
 
 ## List of available metrics
-
 ```
 # HELP cloudflare_worker_cpu_time CPU time quantiles by script name
 # HELP cloudflare_worker_duration Duration quantiles by script name (GB*s)
@@ -93,13 +92,16 @@ The original method of zone filtering by using env variables `ZONE_<name>` is no
 # HELP cloudflare_zone_uniques_total Uniques per zone
 ```
 
+## Helm chart repository
+To deploy the exporter into Kubernetes, we recommend using our manager Helm repository:
+
+```
+helm repo add cloudflare-exporter https://lablabs.github.io/cloudflare-exporter/
+helm install cloudflare-exporter/cloudflare-exporter
+```
 
 ## Docker
-
-
-
 ### Build
-
 Images are available at [Dockerhub](https://hub.docker.com/r/lablabs/cloudflare_exporter)
 
 ```
@@ -107,28 +109,35 @@ docker build -t lablabs/cloudflare_exporter .
 ```
 
 ### Run
-
+Authenticating with email + API key:
 ```
 docker run --rm -p 8080:8080 -e CF_API_KEY=${CF_API_KEY} -e CF_API_EMAIL=${CF_API_EMAIL} lablabs/cloudflare_exporter
 ```
-or
+
+API token:
 ```
 docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} lablabs/cloudflare_exporter
 ```
-or example with selected zones and listen port
+
+Configure zones and listening port:
 ```
 docker run --rm -p 8080:8081 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 lablabs/cloudflare_exporter
 ```
-help
+
+Disable non-free metrics:
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e FREE_TIER=true lablabs/cloudflare_exporter
+```
+
+Access help:
 ```
 docker run --rm -p 8080:8080 -i lablabs/cloudflare_exporter --help
 ```
-## Contributing and reporting issues
 
+## Contributing and reporting issues
 Feel free to create an issue in this repository if you have questions, suggestions or feature requests.
 
 ## License
-
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 See [LICENSE](LICENSE) for full details.
