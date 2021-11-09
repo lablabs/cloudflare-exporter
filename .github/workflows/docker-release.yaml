@@ -3,7 +3,7 @@ name: Build and Publish Docker Images after create release tag
 on:
   push:
     tags:
-      - '^[0-9]+.[0-9]+.[0-9]+$'
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build-and-push-docker-image:
@@ -55,3 +55,4 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+  
