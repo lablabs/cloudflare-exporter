@@ -2,8 +2,10 @@ name: Build and Publish Docker Images
 
 on:
   push:
-    branches: [master]
-  release:
+    branches:
+      - 'master'
+      - 'releases/[0-9]+.[0-9]+.[0-9]+'
+      - '!releases/cloudflare-exporter-**'
 
 jobs:
   build-and-push-docker-image:
@@ -37,7 +39,7 @@ jobs:
         uses: haya14busa/action-cond@v1
         id: imageTags
         with:
-          cond: ${{ github.event_name == 'release' }}
+          cond: ${{ github.ref == 'refs/heads/releases/**' }}
           if_true: 'type=ref,event=tag'
           if_false: 'type=raw,value=latest'
           
@@ -59,7 +61,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          push: ${{ github.event_name != 'pull_request' }}
-
+          push: false
+          
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
