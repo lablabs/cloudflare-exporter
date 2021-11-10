@@ -18,7 +18,7 @@ The following table lists the configurable parameters of the Cloudflare-exporter
 | Parameter                | Description             | Default        |
 | ------------------------ | ----------------------- | -------------- |
 | `replicaCount` |  | `1` |
-| `image.repository` |  | `"lablabs/cloudflare_exporter"` |
+| `image.repository` |  | `"ghcr.io/lablabs/cloudflare_exporter"` |
 | `image.pullPolicy` |  | `"Always"` |
 | `image.tag` |  | `"0.0.2"` |
 | `env` |  | `[]` |
