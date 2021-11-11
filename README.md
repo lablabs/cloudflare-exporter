@@ -102,36 +102,36 @@ helm install cloudflare-exporter/cloudflare-exporter
 
 ## Docker
 ### Build
-Images are available at [Dockerhub](https://hub.docker.com/r/lablabs/cloudflare_exporter)
+Images are available at [Github Container Registry](https://github.com/lablabs/cloudflare-exporter/pkgs/container/cloudflare_exporter)
 
 ```
-docker build -t lablabs/cloudflare_exporter .
+docker build -t ghcr.io/lablabs/cloudflare_exporter .
 ```
 
 ### Run
 Authenticating with email + API key:
 ```
-docker run --rm -p 8080:8080 -e CF_API_KEY=${CF_API_KEY} -e CF_API_EMAIL=${CF_API_EMAIL} lablabs/cloudflare_exporter
+docker run --rm -p 8080:8080 -e CF_API_KEY=${CF_API_KEY} -e CF_API_EMAIL=${CF_API_EMAIL} ghcr.io/lablabs/cloudflare_exporter
 ```
 
 API token:
 ```
-docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} lablabs/cloudflare_exporter
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} ghcr.io/lablabs/cloudflare_exporter
 ```
 
 Configure zones and listening port:
 ```
-docker run --rm -p 8080:8081 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 lablabs/cloudflare_exporter
+docker run --rm -p 8080:8081 -e CF_API_TOKEN=${CF_API_TOKEN} -e CF_ZONES=zoneid1,zoneid2,zoneid3 -e LISTEN=:8081 ghcr.io/lablabs/cloudflare_exporter
 ```
 
 Disable non-free metrics:
 ```
-docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e FREE_TIER=true lablabs/cloudflare_exporter
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e FREE_TIER=true ghcr.io/lablabs/cloudflare_exporter
 ```
 
 Access help:
 ```
-docker run --rm -p 8080:8080 -i lablabs/cloudflare_exporter --help
+docker run --rm -p 8080:8080 -i ghcr.io/lablabs/cloudflare_exporter --help
 ```
 
 ## Contributing and reporting issues
