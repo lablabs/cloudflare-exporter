@@ -35,6 +35,6 @@ jobs:
             grep -vE $grep_filter | 
             bash
         env:
-        - original_image="lablabs/cloudflare_exporter"
-        - target_acr="ghcr.io"
-        - grep_filter="latest"
+          original_image: lablabs/cloudflare_exporter
+          target_acr: ghcr.io
+          grep_filter: latest
