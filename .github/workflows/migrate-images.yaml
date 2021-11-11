@@ -1,0 +1,40 @@
+name: Build and Publish Docker Images after push to master branch
+
+on:
+  push:
+
+jobs:
+  migrate-docker-images:
+    name: Migrate Docker images from dockerhub to GHCR
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to Github Packages
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Migrate Images
+        run: |
+          docker pull $original_image --all-tags
+          # format output to be: 
+          #   docker tag ORIGINAL_IMAGE_NAME:VERSION TARGET_IMAGE_NAME:VERSION |
+          #   docker push TARGET_IMAGE_NAME:VERSION
+          # then filter the result, removing any entries containing words defined on $grep_filter (i.e. rc, beta, alpha, etc)
+          # finally, execute those as commands
+          docker images $original_image --format "docker tag {{.Repository}}:{{.Tag}} $target_acr/{{.Repository}}:{{.Tag}} | 
+          docker push $target_acr/{{.Repository}}:{{.Tag}}" | 
+            grep -vE $grep_filter | 
+            bash
+        env:
+        - original_image="lablabs/cloudflare_exporter"
+        - target_acr="ghcr.io"
+        - grep_filter="latest"
