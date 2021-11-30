@@ -1,0 +1,11 @@
+linters:
+  enable:
+    - megacheck
+    - gofmt
+    - govet
+    - revive # replacement for golint
+
+linters-settings:
+  gofmt:
+    # simplify code: gofmt with `-s` option, true by default
+    simplify: true
