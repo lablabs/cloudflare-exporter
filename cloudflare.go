@@ -45,10 +45,10 @@ type accountResp struct {
 		} `json:"sum"`
 
 		Quantiles struct {
-			CpuTimeP50   float32 `json:"cpuTimeP50"`
-			CpuTimeP75   float32 `json:"cpuTimeP75"`
-			CpuTimeP99   float32 `json:"cpuTimeP99"`
-			CpuTimeP999  float32 `json:"cpuTimeP999"`
+			CPUTimeP50   float32 `json:"cpuTimeP50"`
+			CPUTimeP75   float32 `json:"cpuTimeP75"`
+			CPUTimeP99   float32 `json:"cpuTimeP99"`
+			CPUTimeP999  float32 `json:"cpuTimeP999"`
 			DurationP50  float32 `json:"durationP50"`
 			DurationP75  float32 `json:"durationP75"`
 			DurationP99  float32 `json:"durationP99"`
@@ -124,7 +124,7 @@ type zoneResp struct {
 			} `json:"responseStatusMap"`
 			ThreatPathing []struct {
 				Name     string `json:"threatPathingName"`
-				Requests uint64 `json:"requests	"`
+				Requests uint64 `json:"requests"`
 			} `json:"threatPathingMap"`
 			Threats uint64 `json:"threats"`
 		} `json:"sum"`
