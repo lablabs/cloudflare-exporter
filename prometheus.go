@@ -24,20 +24,8 @@ var (
 	}, []string{"zone"},
 	)
 
-	zoneRequestUncached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_uncached",
-		Help: "Number of uncached requests for zone",
-	}, []string{"zone"},
-	)
-
 	zoneRequestSSLEncrypted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_requests_ssl_encrypted",
-		Help: "Number of encrypted requests for zone",
-	}, []string{"zone"},
-	)
-
-	zoneRequestSSLUnencrypted = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_ssl_unencrypted",
 		Help: "Number of encrypted requests for zone",
 	}, []string{"zone"},
 	)
@@ -84,21 +72,9 @@ var (
 	}, []string{"zone"},
 	)
 
-	zoneBandwidthUncached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_uncached",
-		Help: "Uncached bandwidth per zone in bytes",
-	}, []string{"zone"},
-	)
-
 	zoneBandwidthSSLEncrypted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_bandwidth_ssl_encrypted",
 		Help: "Encrypted bandwidth per zone in bytes",
-	}, []string{"zone"},
-	)
-
-	zoneBandwidthSSLUnencrypted = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_ssl_unencrypted",
-		Help: "Unencrypted bandwidth per zone in bytes",
 	}, []string{"zone"},
 	)
 
@@ -136,12 +112,6 @@ var (
 		Name: "cloudflare_zone_pageviews_total",
 		Help: "Pageviews per zone",
 	}, []string{"zone"},
-	)
-
-	zonePageviewsSearchEngines = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_pageviews_search_engines",
-		Help: "Pageviews per zone per engine",
-	}, []string{"zone", "searchengine"},
 	)
 
 	zoneUniquesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -186,7 +156,7 @@ var (
 	}, []string{"script_name"},
 	)
 
-	workerCpuTime = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	workerCPUTime = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "cloudflare_worker_cpu_time",
 		Help: "CPU time quantiles by script name",
 	}, []string{"script_name", "quantile"},
@@ -212,10 +182,10 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 		for _, w := range a.WorkersInvocationsAdaptive {
 			workerRequests.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Requests))
 			workerErrors.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName}).Add(float64(w.Sum.Errors))
-			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P50"}).Set(float64(w.Quantiles.CpuTimeP50))
-			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P75"}).Set(float64(w.Quantiles.CpuTimeP75))
-			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P99"}).Set(float64(w.Quantiles.CpuTimeP99))
-			workerCpuTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P999"}).Set(float64(w.Quantiles.CpuTimeP999))
+			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P50"}).Set(float64(w.Quantiles.CPUTimeP50))
+			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P75"}).Set(float64(w.Quantiles.CPUTimeP75))
+			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P99"}).Set(float64(w.Quantiles.CPUTimeP99))
+			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P999"}).Set(float64(w.Quantiles.CPUTimeP999))
 			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P50"}).Set(float64(w.Quantiles.DurationP50))
 			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P75"}).Set(float64(w.Quantiles.DurationP75))
 			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P99"}).Set(float64(w.Quantiles.DurationP99))
