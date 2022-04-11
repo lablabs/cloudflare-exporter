@@ -84,6 +84,7 @@ func fetchMetrics() {
 
 		go fetchZoneAnalytics(targetZones, &wg)
 		go fetchZoneColocationAnalytics(targetZones, &wg)
+		go fetchLoadBalancerAnalytics(targetZones, &wg)
 	}
 
 	wg.Wait()

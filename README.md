@@ -90,6 +90,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_threats_country Threats per zone per country
 # HELP cloudflare_zone_threats_total Threats per zone
 # HELP cloudflare_zone_uniques_total Uniques per zone
+# HELP cloudflare_zone_pool_health_status Reports the health of a pool, 1 for healthy, 0 for unhealthy.
 ```
 
 ## Helm chart repository
