@@ -48,6 +48,12 @@ var (
 	}, []string{"zone", "status"},
 	)
 
+	zoneRequestBrowserMap = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_requests_browser_map_page_views_count",
+		Help: "Number of successful requests for HTML pages per zone",
+	}, []string{"zone", "family"},
+	)
+
 	zoneRequestOriginStatusCountryHost = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_requests_origin_status_country_host",
 		Help: "Count of not cached requests for zone per origin HTTP status per country per host",
@@ -280,6 +286,10 @@ func addHTTPGroups(z *zoneResp, name string) {
 
 	for _, status := range zt.Sum.ResponseStatus {
 		zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
+	}
+
+	for _, browser := range zt.Sum.BrowserMap {
+		zoneRequestBrowserMap.With(prometheus.Labels{"zone": name, "family": browser.UaBrowserFamily}).Add(float64(browser.PageViews))
 	}
 
 	zoneBandwidthTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Bytes))
