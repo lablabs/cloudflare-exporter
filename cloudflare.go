@@ -31,6 +31,12 @@ type cloudflareResponseColo struct {
 	} `json:"viewer"`
 }
 
+type cloudflareResponseLb struct {
+	Viewer struct {
+		Zones []lbResp `json:"zones"`
+	} `json:"viewer"`
+}
+
 type accountResp struct {
 	WorkersInvocationsAdaptive []struct {
 		Dimensions struct {
@@ -169,6 +175,22 @@ type zoneResp struct {
 		} `json:"dimensions"`
 	} `json:"healthCheckEventsAdaptiveGroups"`
 
+	ZoneTag string `json:"zoneTag"`
+}
+
+type lbResp struct {
+	LoadBalancingRequestsAdaptiveGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			ColoCode            string `json:"coloCode"`
+			LbName              string `json:"lbName"`
+			Region              string `json:"region"`
+			SelectedOriginName  string `json:"selectedOriginName"`
+			SelectedPoolHealthy int    `json:"selectedPoolHealthy"`
+			SelectedPoolName    string `json:"selectedPoolName"`
+			SteeringPolicy      string `json:"steeringPolicy"`
+		} `json:"dimensions"`
+	} `json:"loadBalancingRequestsAdaptiveGroups"`
 	ZoneTag string `json:"zoneTag"`
 }
 
@@ -450,6 +472,56 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 		return nil, err
 	}
 
+	return &resp, nil
+}
+
+func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	s := 60 * time.Second
+	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
+
+	request := graphql.NewRequest(`
+	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+		viewer {
+			zones(filter: { zoneTag_in: $zoneIDs }) {
+				zoneTag
+				loadBalancingRequestsAdaptiveGroups(
+					filter: { datetime_geq: $mintime, datetime_lt: $maxtime},
+					limit: $limit) {
+					count
+					dimensions {
+						coloCode
+						region
+						lbName
+						selectedPoolName
+						selectedOriginName
+						selectedPoolHealthy
+						steeringPolicy
+					}
+				}
+			}
+		}
+	}
+`)
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
+
+	ctx := context.Background()
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	var resp cloudflareResponseLb
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
+		log.Error(err)
+		return nil, err
+	}
 	return &resp, nil
 }
 
