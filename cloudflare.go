@@ -68,6 +68,7 @@ type zoneRespColo struct {
 		Dimensions struct {
 			Datetime string `json:"datetime"`
 			ColoCode string `json:"coloCode"`
+			Host     string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
 		Count uint64 `json:"count"`
 		Sum   struct {
@@ -381,6 +382,7 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 							sampleInterval
 						}
 						dimensions {
+							clientRequestHTTPHost
 							coloCode
 							datetime
 						}
