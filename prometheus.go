@@ -180,6 +180,13 @@ var (
 	},
 		[]string{"zone", "load_balancer_name", "pool_name"},
 	)
+
+	poolRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_pool_requests_total",
+		Help: "Requests per pool",
+	},
+		[]string{"zone", "load_balancer_name", "pool_name", "origin_name"},
+	)
 )
 
 func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
@@ -384,6 +391,20 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	for _, lb := range l.Viewer.Zones {
 		name := findZoneName(zones, lb.ZoneTag)
 		addLoadBalancingRequestsAdaptive(&lb, name)
+		addLoadBalancingRequestsAdaptiveGroups(&lb, name)
+	}
+}
+
+func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
+
+	for _, g := range z.LoadBalancingRequestsAdaptiveGroups {
+		poolRequestsTotal.With(
+			prometheus.Labels{
+				"zone":               name,
+				"load_balancer_name": g.Dimensions.LbName,
+				"pool_name":          g.Dimensions.SelectedPoolName,
+				"origin_name":        g.Dimensions.SelectedOriginName,
+			}).Add(float64(g.Count))
 	}
 }
 
