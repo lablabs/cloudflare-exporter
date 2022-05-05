@@ -182,15 +182,41 @@ type lbResp struct {
 	LoadBalancingRequestsAdaptiveGroups []struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
-			ColoCode            string `json:"coloCode"`
-			LbName              string `json:"lbName"`
-			Region              string `json:"region"`
-			SelectedOriginName  string `json:"selectedOriginName"`
-			SelectedPoolHealthy int    `json:"selectedPoolHealthy"`
-			SelectedPoolName    string `json:"selectedPoolName"`
-			SteeringPolicy      string `json:"steeringPolicy"`
+			LbName               string `json:"lbName"`
+			Proxied              uint8  `json:"proxied"`
+			Region               string `json:"region"`
+			SelectedOriginName   string `json:"selectedOriginName"`
+			SelectedPoolAvgRttMs uint64 `json:"selectedPoolAvgRttMs"`
+			SelectedPoolHealthy  uint8  `json:"selectedPoolHealthy"`
+			SelectedPoolName     string `json:"selectedPoolName"`
+			SteeringPolicy       string `json:"steeringPolicy"`
 		} `json:"dimensions"`
 	} `json:"loadBalancingRequestsAdaptiveGroups"`
+
+	LoadBalancingRequestsAdaptive []struct {
+		LbName                string `json:"lbName"`
+		Proxied               uint8  `json:"proxied"`
+		Region                string `json:"region"`
+		SelectedPoolHealthy   uint8  `json:"selectedPoolHealthy"`
+		SelectedPoolID        string `json:"selectedPoolID"`
+		SelectedPoolName      string `json:"selectedPoolName"`
+		SessionAffinityStatus string `json:"sessionAffinityStatus"`
+		SteeringPolicy        string `json:"steeringPolicy"`
+		SelectedPoolAvgRttMs  uint64 `json:"selectedPoolAvgRttMs"`
+		Pools                 []struct {
+			AvgRttMs uint64 `json:"avgRttMs"`
+			Healthy  uint8  `json:"healthy"`
+			ID       string `json:"id"`
+			PoolName string `json:"poolName"`
+		} `json:"pools"`
+		Origins []struct {
+			OriginName string `json:"originName"`
+			Health     uint8  `json:"health"`
+			IPv4       string `json:"ipv4"`
+			Selected   uint8  `json:"selected"`
+		} `json:"origins"`
+	} `json:"loadBalancingRequestsAdaptive"`
+
 	ZoneTag string `json:"zoneTag"`
 }
 
@@ -491,13 +517,39 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 					limit: $limit) {
 					count
 					dimensions {
-						coloCode
 						region
 						lbName
 						selectedPoolName
+						proxied
 						selectedOriginName
+						selectedPoolAvgRttMs
 						selectedPoolHealthy
 						steeringPolicy
+					}
+				}
+				loadBalancingRequestsAdaptive(
+					filter: { datetime_geq: $mintime, datetime_lt: $maxtime},
+					limit: $limit) {
+					lbName
+					proxied
+					region
+					selectedPoolHealthy
+					selectedPoolId
+					selectedPoolName
+					sessionAffinityStatus
+					steeringPolicy
+					selectedPoolAvgRttMs
+					pools {
+						id
+						poolName
+						healthy
+						avgRttMs
+					}
+					origins {
+						originName
+						health
+						ipv4
+						selected
 					}
 				}
 			}
