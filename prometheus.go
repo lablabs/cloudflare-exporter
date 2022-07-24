@@ -174,12 +174,18 @@ var (
 	}, []string{"script_name", "quantile"},
 	)
 
-	poolHealthStatus = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cloudflare_zone_pool_health_status",
-			Help: "Reports the health of a pool, 1 for healthy, 0 for unhealthy.",
-		},
-		[]string{"zone", "colo_code", "load_balancer_name", "origin_name", "steering_policy", "pool_name", "region"},
+	poolHealthStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "cloudflare_zone_pool_health_status",
+		Help: "Reports the health of a pool, 1 for healthy, 0 for unhealthy.",
+	},
+		[]string{"zone", "load_balancer_name", "pool_name"},
+	)
+
+	poolRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cloudflare_zone_pool_requests_total",
+		Help: "Requests per pool",
+	},
+		[]string{"zone", "load_balancer_name", "pool_name", "origin_name"},
 	)
 )
 
@@ -384,6 +390,7 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	}
 	for _, lb := range l.Viewer.Zones {
 		name := findZoneName(zones, lb.ZoneTag)
+		addLoadBalancingRequestsAdaptive(&lb, name)
 		addLoadBalancingRequestsAdaptiveGroups(&lb, name)
 	}
 }
@@ -391,16 +398,27 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
 
 	for _, g := range z.LoadBalancingRequestsAdaptiveGroups {
-		poolHealthStatus.With(
+		poolRequestsTotal.With(
 			prometheus.Labels{
 				"zone":               name,
-				"colo_code":          g.Dimensions.ColoCode,
 				"load_balancer_name": g.Dimensions.LbName,
-				"origin_name":        g.Dimensions.SelectedOriginName,
-				"steering_policy":    g.Dimensions.SteeringPolicy,
 				"pool_name":          g.Dimensions.SelectedPoolName,
-				"region":             g.Dimensions.Region,
-			}).Set(float64(g.Dimensions.SelectedPoolHealthy))
+				"origin_name":        g.Dimensions.SelectedOriginName,
+			}).Add(float64(g.Count))
+	}
+}
+
+func addLoadBalancingRequestsAdaptive(z *lbResp, name string) {
+
+	for _, g := range z.LoadBalancingRequestsAdaptive {
+		for _, p := range g.Pools {
+			poolHealthStatus.With(
+				prometheus.Labels{
+					"zone":               name,
+					"load_balancer_name": g.LbName,
+					"pool_name":          p.PoolName,
+				}).Set(float64(p.Healthy))
+		}
 	}
 
 }
