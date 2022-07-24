@@ -15,14 +15,16 @@ import (
 )
 
 var (
-	cfgListen      = ":8080"
-	cfgCfAPIKey    = ""
-	cfgCfAPIEmail  = ""
-	cfgCfAPIToken  = ""
-	cfgMetricsPath = "/metrics"
-	cfgZones       = ""
-	cfgScrapeDelay = 300
-	cfgFreeTier    = false
+	cfgListen       = ":8080"
+	cfgCfAPIKey     = ""
+	cfgCfAPIEmail   = ""
+	cfgCfAPIToken   = ""
+	cfgMetricsPath  = "/metrics"
+	cfgZones        = ""
+	cfgExcludeZones = ""
+	cfgScrapeDelay  = 300
+	cfgFreeTier     = false
+	cfgBatchSize    = 10
 )
 
 func getTargetZones() []string {
@@ -38,6 +40,15 @@ func getTargetZones() []string {
 				zoneIDs = append(zoneIDs, split[1])
 			}
 		}
+	}
+	return zoneIDs
+}
+
+func getExcludedZones() []string {
+	var zoneIDs []string
+
+	if len(cfgExcludeZones) > 0 {
+		zoneIDs = strings.Split(cfgExcludeZones, ",")
 	}
 	return zoneIDs
 }
@@ -61,21 +72,48 @@ func filterZones(all []cloudflare.Zone, target []string) []cloudflare.Zone {
 	return filtered
 }
 
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func filterExcludedZones(all []cloudflare.Zone, exclude []string) []cloudflare.Zone {
+	var filtered []cloudflare.Zone
+
+	if (len(exclude)) == 0 {
+		return all
+	}
+
+	for _, z := range all {
+		if contains(exclude, z.ID) {
+			log.Info("Exclude zone: ", z.ID, " ", z.Name)
+		} else {
+			filtered = append(filtered, z)
+		}
+	}
+
+	return filtered
+}
+
 func fetchMetrics() {
 	var wg sync.WaitGroup
 	zones := fetchZones()
 	accounts := fetchAccounts()
-	filteredZones := filterZones(zones, getTargetZones())
+	filteredZones := filterExcludedZones(filterZones(zones, getTargetZones()), getExcludedZones())
 
 	for _, a := range accounts {
 		go fetchWorkerAnalytics(a, &wg)
 	}
 
-	// Make requests in groups of 10 to avoid rate limit
+	// Make requests in groups of cfgBatchSize to avoid rate limit
 	// 10 is the maximum amount of zones you can request at once
 	for len(filteredZones) > 0 {
-		sliceLength := 10
-		if len(filteredZones) < 10 {
+		sliceLength := cfgBatchSize
+		if len(filteredZones) < cfgBatchSize {
 			sliceLength = len(filteredZones)
 		}
 
@@ -97,11 +135,16 @@ func main() {
 	flag.StringVar(&cfgCfAPIEmail, "cf_api_email", cfgCfAPIEmail, "cloudflare api email, works with api_key flag")
 	flag.StringVar(&cfgCfAPIToken, "cf_api_token", cfgCfAPIToken, "cloudflare api token (preferred)")
 	flag.StringVar(&cfgZones, "cf_zones", cfgZones, "cloudflare zones to export, comma delimited list")
+	flag.StringVar(&cfgExcludeZones, "cf_exclude_zones", cfgExcludeZones, "cloudflare zones to exclude, comma delimited list")
 	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay, "scrape delay in seconds, defaults to 300")
+	flag.IntVar(&cfgBatchSize, "cf_batch_size", cfgBatchSize, "cloudflare zones batch size (1-10), defaults to 10")
 	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
+	}
+	if cfgBatchSize < 1 || cfgBatchSize > 10 {
+		log.Fatal("CF_BATCH_SIZE must be between 1 and 10")
 	}
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
