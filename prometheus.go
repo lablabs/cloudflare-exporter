@@ -129,13 +129,13 @@ var (
 	zoneColocationVisits = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_colocation_visits",
 		Help: "Total visits per colocation",
-	}, []string{"zone", "colocation"},
+	}, []string{"zone", "colocation", "host"},
 	)
 
 	zoneColocationEdgeResponseBytes = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "cloudflare_zone_colocation_edge_response_bytes",
 		Help: "Edge response bytes per colocation",
-	}, []string{"zone", "colocation"},
+	}, []string{"zone", "colocation", "host"},
 	)
 
 	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -228,8 +228,8 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		cg := z.ColoGroups
 		name := findZoneName(zones, z.ZoneTag)
 		for _, c := range cg {
-			zoneColocationVisits.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.Visits))
-			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode}).Add(float64(c.Sum.EdgeResponseBytes))
+			zoneColocationVisits.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
+			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
 		}
 	}
 }
