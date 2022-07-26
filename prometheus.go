@@ -222,7 +222,11 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	if cfgFreeTier {
 		return
 	}
-	zoneIDs := extractZoneIDs(zones)
+
+	zoneIDs := extractZoneIDs(filterNonFreePlanZones(zones))
+	if len(zoneIDs) == 0 {
+		return
+	}
 
 	r, err := fetchColoTotals(zoneIDs)
 	if err != nil {
@@ -249,7 +253,10 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	zoneIDs := extractZoneIDs(zones)
+	zoneIDs := extractZoneIDs(filterNonFreePlanZones(zones))
+	if len(zoneIDs) == 0 {
+		return
+	}
 
 	r, err := fetchZoneTotals(zoneIDs)
 	if err != nil {
@@ -382,7 +389,10 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	zoneIDs := extractZoneIDs(zones)
+	zoneIDs := extractZoneIDs(filterNonFreePlanZones(zones))
+	if len(zoneIDs) == 0 {
+		return
+	}
 
 	l, err := fetchLoadBalancerTotals(zoneIDs)
 	if err != nil {
