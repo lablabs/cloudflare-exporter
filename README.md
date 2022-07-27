@@ -82,6 +82,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_bandwidth_total Total bandwidth per zone in bytes
 # HELP cloudflare_zone_colocation_edge_response_bytes Edge response bytes per colocation
 # HELP cloudflare_zone_colocation_visits Total visits per colocation
+# HELP cloudflare_zone_colocation_requests_total Total requests per colocation
 # HELP cloudflare_zone_pageviews_total Pageviews per zone
 # HELP cloudflare_zone_requests_cached Number of cached requests for zone
 # HELP cloudflare_zone_requests_content_type Number of request for zone per content type
