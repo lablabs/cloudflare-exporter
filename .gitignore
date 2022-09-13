@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+cloudflare_exporter
 
 # Test binary, built with `go test -c`
 *.test
