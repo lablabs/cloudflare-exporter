@@ -45,10 +45,12 @@ The exporter can be configured using env variables or command flags.
 | `CF_API_KEY` |  API key associated with email (`CF_API_EMAIL` is required if this is set)|
 | `CF_API_TOKEN` |  API authentication token (recommended before API key + email. Version 0.0.5+. see https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
 | `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids. If not set, all zones from account are exported |
+| `CF_EXCLUDE_ZONES` |  (Optional) cloudflare zones to exclude, comma delimited list of zone ids. If not set, no zones from account are excluded |
 | `FREE_TIER` | (Optional) scrape only metrics included in free plan. Accepts `true` or `false`, default `false`. |
 | `LISTEN` |  listen on addr:port (default `:8080`), omit addr to listen on all interfaces |
 | `METRICS_PATH` |  path for metrics, default `/metrics` |
-| `SCRAPE_DELAY` | scrape delay in seconds, default `300`
+| `SCRAPE_DELAY` | scrape delay in seconds, default `300` |
+| `CF_BATCH_SIZE` | cloudflare request zones batch size (1 - 10), default `10` |
 | `ZONE_<NAME>` |  `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
 
 Corresponding flags:
@@ -57,10 +59,12 @@ Corresponding flags:
   -cf_api_key="": cloudflare api key, works with api_email flag
   -cf_api_token="": cloudflare api token (version 0.0.5+, preferred)
   -cf_zones="": cloudflare zones to export, comma delimited list
+  -cf_exclude_zones="": cloudflare zones to exclude, comma delimited list
   -free_tier=false: scrape only metrics included in free plan, default false
   -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
   -metrics_path="/metrics": path for metrics, default /metrics
   -scrape_delay=300: scrape delay in seconds, defaults to 300
+  -cf_batch_size=10: cloudflare zones batch size (1-10)
 ```
 
 Note: `ZONE_<name>` configuration is not supported as flag.
@@ -78,6 +82,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_bandwidth_total Total bandwidth per zone in bytes
 # HELP cloudflare_zone_colocation_edge_response_bytes Edge response bytes per colocation
 # HELP cloudflare_zone_colocation_visits Total visits per colocation
+# HELP cloudflare_zone_colocation_requests_total Total requests per colocation
 # HELP cloudflare_zone_pageviews_total Pageviews per zone
 # HELP cloudflare_zone_requests_cached Number of cached requests for zone
 # HELP cloudflare_zone_requests_content_type Number of request for zone per content type
@@ -91,7 +96,8 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_threats_country Threats per zone per country
 # HELP cloudflare_zone_threats_total Threats per zone
 # HELP cloudflare_zone_uniques_total Uniques per zone
-# HELP cloudflare_zone_pool_health_status Reports the health of a pool, 1 for healthy, 0 for unhealthy.
+# HELP cloudflare_zone_pool_health_status Reports the health of a pool, 1 for healthy, 0 for unhealthy
+# HELP cloudflare_zone_pool_requests_total Requests per pool
 ```
 
 ## Helm chart repository
