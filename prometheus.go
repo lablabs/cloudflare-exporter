@@ -10,53 +10,53 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type MetricKind string
+type MetricName string
 
-func (mn MetricKind) String() string {
+func (mn MetricName) String() string {
 	return string(mn)
 }
 
 const (
-	zoneRequestTotalMetricName                   MetricKind = "cloudflare_zone_requests_total"
-	zoneRequestCachedMetricName                  MetricKind = "cloudflare_zone_requests_cached"
-	zoneRequestSSLEncryptedMetricName            MetricKind = "cloudflare_zone_requests_ssl_encrypted"
-	zoneRequestContentTypeMetricName             MetricKind = "cloudflare_zone_requests_content_type"
-	zoneRequestCountryMetricName                 MetricKind = "cloudflare_zone_requests_country"
-	zoneRequestHTTPStatusMetricName              MetricKind = "cloudflare_zone_requests_status"
-	zoneRequestBrowserMapMetricName              MetricKind = "cloudflare_zone_requests_browser_map_page_views_count"
-	zoneRequestOriginStatusCountryHostMetricName MetricKind = "cloudflare_zone_requests_origin_status_country_host"
-	zoneRequestStatusCountryHostMetricName       MetricKind = "cloudflare_zone_requests_status_country_host"
-	zoneBandwidthTotalMetricName                 MetricKind = "cloudflare_zone_bandwidth_total"
-	zoneBandwidthCachedMetricName                MetricKind = "cloudflare_zone_bandwidth_cached"
-	zoneBandwidthSSLEncryptedMetricName          MetricKind = "cloudflare_zone_bandwidth_ssl_encrypted"
-	zoneBandwidthContentTypeMetricName           MetricKind = "cloudflare_zone_bandwidth_content_type"
-	zoneBandwidthCountryMetricName               MetricKind = "cloudflare_zone_bandwidth_country"
-	zoneThreatsTotalMetricName                   MetricKind = "cloudflare_zone_threats_total"
-	zoneThreatsCountryMetricName                 MetricKind = "cloudflare_zone_threats_country"
-	zoneThreatsTypeMetricName                    MetricKind = "cloudflare_zone_threats_type"
-	zonePageviewsTotalMetricName                 MetricKind = "cloudflare_zone_pageviews_total"
-	zoneUniquesTotalMetricName                   MetricKind = "cloudflare_zone_uniques_total"
-	zoneColocationVisitsMetricName               MetricKind = "cloudflare_zone_colocation_visits"
-	zoneColocationEdgeResponseBytesMetricName    MetricKind = "cloudflare_zone_colocation_edge_response_bytes"
-	zoneColocationRequestsTotalMetricName        MetricKind = "cloudflare_zone_colocation_requests_total"
-	zoneFirewallEventsCountMetricName            MetricKind = "cloudflare_zone_firewall_events_count"
-	zoneHealthCheckEventsOriginCountMetricName   MetricKind = "cloudflare_zone_health_check_events_origin_count"
-	workerRequestsMetricName                     MetricKind = "cloudflare_worker_requests_count"
-	workerErrorsMetricName                       MetricKind = "cloudflare_worker_errors_count"
-	workerCPUTimeMetricName                      MetricKind = "cloudflare_worker_cpu_time"
-	workerDurationMetricName                     MetricKind = "cloudflare_worker_duration"
-	poolHealthStatusMetricName                   MetricKind = "cloudflare_zone_pool_health_status"
-	poolRequestsTotalMetricName                  MetricKind = "cloudflare_zone_pool_requests_total"
+	zoneRequestTotalMetricName                   MetricName = "cloudflare_zone_requests_total"
+	zoneRequestCachedMetricName                  MetricName = "cloudflare_zone_requests_cached"
+	zoneRequestSSLEncryptedMetricName            MetricName = "cloudflare_zone_requests_ssl_encrypted"
+	zoneRequestContentTypeMetricName             MetricName = "cloudflare_zone_requests_content_type"
+	zoneRequestCountryMetricName                 MetricName = "cloudflare_zone_requests_country"
+	zoneRequestHTTPStatusMetricName              MetricName = "cloudflare_zone_requests_status"
+	zoneRequestBrowserMapMetricName              MetricName = "cloudflare_zone_requests_browser_map_page_views_count"
+	zoneRequestOriginStatusCountryHostMetricName MetricName = "cloudflare_zone_requests_origin_status_country_host"
+	zoneRequestStatusCountryHostMetricName       MetricName = "cloudflare_zone_requests_status_country_host"
+	zoneBandwidthTotalMetricName                 MetricName = "cloudflare_zone_bandwidth_total"
+	zoneBandwidthCachedMetricName                MetricName = "cloudflare_zone_bandwidth_cached"
+	zoneBandwidthSSLEncryptedMetricName          MetricName = "cloudflare_zone_bandwidth_ssl_encrypted"
+	zoneBandwidthContentTypeMetricName           MetricName = "cloudflare_zone_bandwidth_content_type"
+	zoneBandwidthCountryMetricName               MetricName = "cloudflare_zone_bandwidth_country"
+	zoneThreatsTotalMetricName                   MetricName = "cloudflare_zone_threats_total"
+	zoneThreatsCountryMetricName                 MetricName = "cloudflare_zone_threats_country"
+	zoneThreatsTypeMetricName                    MetricName = "cloudflare_zone_threats_type"
+	zonePageviewsTotalMetricName                 MetricName = "cloudflare_zone_pageviews_total"
+	zoneUniquesTotalMetricName                   MetricName = "cloudflare_zone_uniques_total"
+	zoneColocationVisitsMetricName               MetricName = "cloudflare_zone_colocation_visits"
+	zoneColocationEdgeResponseBytesMetricName    MetricName = "cloudflare_zone_colocation_edge_response_bytes"
+	zoneColocationRequestsTotalMetricName        MetricName = "cloudflare_zone_colocation_requests_total"
+	zoneFirewallEventsCountMetricName            MetricName = "cloudflare_zone_firewall_events_count"
+	zoneHealthCheckEventsOriginCountMetricName   MetricName = "cloudflare_zone_health_check_events_origin_count"
+	workerRequestsMetricName                     MetricName = "cloudflare_worker_requests_count"
+	workerErrorsMetricName                       MetricName = "cloudflare_worker_errors_count"
+	workerCPUTimeMetricName                      MetricName = "cloudflare_worker_cpu_time"
+	workerDurationMetricName                     MetricName = "cloudflare_worker_duration"
+	poolHealthStatusMetricName                   MetricName = "cloudflare_zone_pool_health_status"
+	poolRequestsTotalMetricName                  MetricName = "cloudflare_zone_pool_requests_total"
 )
 
-type MetricsSet map[MetricKind]struct{}
+type MetricsSet map[MetricName]struct{}
 
-func (ms MetricsSet) Has(mn MetricKind) bool {
+func (ms MetricsSet) Has(mn MetricName) bool {
 	_, exists := ms[mn]
 	return exists
 }
 
-func (ms MetricsSet) Add(mn MetricKind) {
+func (ms MetricsSet) Add(mn MetricName) {
 	ms[mn] = struct{}{}
 }
 
@@ -284,10 +284,10 @@ func buildDeniedMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 	deniedMetricsSet := MetricsSet{}
 	allMetricsSet := buildAllMetricsSet()
 	for _, metric := range metricsDenylist {
-		if !allMetricsSet.Has(MetricKind(metric)) {
+		if !allMetricsSet.Has(MetricName(metric)) {
 			return nil, fmt.Errorf("metric %s doesn't exists", metric)
 		}
-		deniedMetricsSet.Add(MetricKind(metric))
+		deniedMetricsSet.Add(MetricName(metric))
 	}
 	return deniedMetricsSet, nil
 }
