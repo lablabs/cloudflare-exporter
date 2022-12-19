@@ -17,6 +17,8 @@ fullnameOverride: ""
 
 podAnnotations: {}
 
+deploymentAnnotations: {}
+
 podSecurityContext: {}
   # fsGroup: 2000
 
