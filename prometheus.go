@@ -1,199 +1,389 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 
 	"github.com/biter777/countries"
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
+
+type MetricName string
+
+func (mn MetricName) String() string {
+	return string(mn)
+}
+
+const (
+	zoneRequestTotalMetricName                   MetricName = "cloudflare_zone_requests_total"
+	zoneRequestCachedMetricName                  MetricName = "cloudflare_zone_requests_cached"
+	zoneRequestSSLEncryptedMetricName            MetricName = "cloudflare_zone_requests_ssl_encrypted"
+	zoneRequestContentTypeMetricName             MetricName = "cloudflare_zone_requests_content_type"
+	zoneRequestCountryMetricName                 MetricName = "cloudflare_zone_requests_country"
+	zoneRequestHTTPStatusMetricName              MetricName = "cloudflare_zone_requests_status"
+	zoneRequestBrowserMapMetricName              MetricName = "cloudflare_zone_requests_browser_map_page_views_count"
+	zoneRequestOriginStatusCountryHostMetricName MetricName = "cloudflare_zone_requests_origin_status_country_host"
+	zoneRequestStatusCountryHostMetricName       MetricName = "cloudflare_zone_requests_status_country_host"
+	zoneBandwidthTotalMetricName                 MetricName = "cloudflare_zone_bandwidth_total"
+	zoneBandwidthCachedMetricName                MetricName = "cloudflare_zone_bandwidth_cached"
+	zoneBandwidthSSLEncryptedMetricName          MetricName = "cloudflare_zone_bandwidth_ssl_encrypted"
+	zoneBandwidthContentTypeMetricName           MetricName = "cloudflare_zone_bandwidth_content_type"
+	zoneBandwidthCountryMetricName               MetricName = "cloudflare_zone_bandwidth_country"
+	zoneThreatsTotalMetricName                   MetricName = "cloudflare_zone_threats_total"
+	zoneThreatsCountryMetricName                 MetricName = "cloudflare_zone_threats_country"
+	zoneThreatsTypeMetricName                    MetricName = "cloudflare_zone_threats_type"
+	zonePageviewsTotalMetricName                 MetricName = "cloudflare_zone_pageviews_total"
+	zoneUniquesTotalMetricName                   MetricName = "cloudflare_zone_uniques_total"
+	zoneColocationVisitsMetricName               MetricName = "cloudflare_zone_colocation_visits"
+	zoneColocationEdgeResponseBytesMetricName    MetricName = "cloudflare_zone_colocation_edge_response_bytes"
+	zoneColocationRequestsTotalMetricName        MetricName = "cloudflare_zone_colocation_requests_total"
+	zoneFirewallEventsCountMetricName            MetricName = "cloudflare_zone_firewall_events_count"
+	zoneHealthCheckEventsOriginCountMetricName   MetricName = "cloudflare_zone_health_check_events_origin_count"
+	workerRequestsMetricName                     MetricName = "cloudflare_worker_requests_count"
+	workerErrorsMetricName                       MetricName = "cloudflare_worker_errors_count"
+	workerCPUTimeMetricName                      MetricName = "cloudflare_worker_cpu_time"
+	workerDurationMetricName                     MetricName = "cloudflare_worker_duration"
+	poolHealthStatusMetricName                   MetricName = "cloudflare_zone_pool_health_status"
+	poolRequestsTotalMetricName                  MetricName = "cloudflare_zone_pool_requests_total"
+)
+
+type MetricsSet map[MetricName]struct{}
+
+func (ms MetricsSet) Has(mn MetricName) bool {
+	_, exists := ms[mn]
+	return exists
+}
+
+func (ms MetricsSet) Add(mn MetricName) {
+	ms[mn] = struct{}{}
+}
 
 var (
 	// Requests
-	zoneRequestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_total",
+	zoneRequestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestTotalMetricName.String(),
 		Help: "Number of requests for zone",
 	}, []string{"zone"},
 	)
 
-	zoneRequestCached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_cached",
+	zoneRequestCached = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestCachedMetricName.String(),
 		Help: "Number of cached requests for zone",
 	}, []string{"zone"},
 	)
 
-	zoneRequestSSLEncrypted = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_ssl_encrypted",
+	zoneRequestSSLEncrypted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestSSLEncryptedMetricName.String(),
 		Help: "Number of encrypted requests for zone",
 	}, []string{"zone"},
 	)
 
-	zoneRequestContentType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_content_type",
+	zoneRequestContentType = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestContentTypeMetricName.String(),
 		Help: "Number of request for zone per content type",
 	}, []string{"zone", "content_type"},
 	)
 
-	zoneRequestCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_country",
+	zoneRequestCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestCountryMetricName.String(),
 		Help: "Number of request for zone per country",
 	}, []string{"zone", "country", "region"},
 	)
 
-	zoneRequestHTTPStatus = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_status",
+	zoneRequestHTTPStatus = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestHTTPStatusMetricName.String(),
 		Help: "Number of request for zone per HTTP status",
 	}, []string{"zone", "status"},
 	)
 
-	zoneRequestBrowserMap = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_browser_map_page_views_count",
+	zoneRequestBrowserMap = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestBrowserMapMetricName.String(),
 		Help: "Number of successful requests for HTML pages per zone",
 	}, []string{"zone", "family"},
 	)
 
-	zoneRequestOriginStatusCountryHost = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_origin_status_country_host",
+	zoneRequestOriginStatusCountryHost = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestOriginStatusCountryHostMetricName.String(),
 		Help: "Count of not cached requests for zone per origin HTTP status per country per host",
 	}, []string{"zone", "status", "country", "host"},
 	)
 
-	zoneRequestStatusCountryHost = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_requests_status_country_host",
+	zoneRequestStatusCountryHost = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestStatusCountryHostMetricName.String(),
 		Help: "Count of requests for zone per edge HTTP status per country per host",
 	}, []string{"zone", "status", "country", "host"},
 	)
 
-	zoneBandwidthTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_total",
+	zoneBandwidthTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthTotalMetricName.String(),
 		Help: "Total bandwidth per zone in bytes",
 	}, []string{"zone"},
 	)
 
-	zoneBandwidthCached = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_cached",
+	zoneBandwidthCached = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthCachedMetricName.String(),
 		Help: "Cached bandwidth per zone in bytes",
 	}, []string{"zone"},
 	)
 
-	zoneBandwidthSSLEncrypted = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_ssl_encrypted",
+	zoneBandwidthSSLEncrypted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthSSLEncryptedMetricName.String(),
 		Help: "Encrypted bandwidth per zone in bytes",
 	}, []string{"zone"},
 	)
 
-	zoneBandwidthContentType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_content_type",
+	zoneBandwidthContentType = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthContentTypeMetricName.String(),
 		Help: "Bandwidth per zone per content type",
 	}, []string{"zone", "content_type"},
 	)
 
-	zoneBandwidthCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_bandwidth_country",
+	zoneBandwidthCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthCountryMetricName.String(),
 		Help: "Bandwidth per country per zone",
 	}, []string{"zone", "country", "region"},
 	)
 
-	zoneThreatsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_threats_total",
+	zoneThreatsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneThreatsTotalMetricName.String(),
 		Help: "Threats per zone",
 	}, []string{"zone"},
 	)
 
-	zoneThreatsCountry = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_threats_country",
+	zoneThreatsCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneThreatsCountryMetricName.String(),
 		Help: "Threats per zone per country",
 	}, []string{"zone", "country", "region"},
 	)
 
-	zoneThreatsType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_threats_type",
+	zoneThreatsType = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneThreatsTypeMetricName.String(),
 		Help: "Threats per zone per type",
 	}, []string{"zone", "type"},
 	)
 
-	zonePageviewsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_pageviews_total",
+	zonePageviewsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zonePageviewsTotalMetricName.String(),
 		Help: "Pageviews per zone",
 	}, []string{"zone"},
 	)
 
-	zoneUniquesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_uniques_total",
+	zoneUniquesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneUniquesTotalMetricName.String(),
 		Help: "Uniques per zone",
 	}, []string{"zone"},
 	)
 
-	zoneColocationVisits = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_visits",
+	zoneColocationVisits = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneColocationVisitsMetricName.String(),
 		Help: "Total visits per colocation",
 	}, []string{"zone", "colocation", "host"},
 	)
 
-	zoneColocationEdgeResponseBytes = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_edge_response_bytes",
+	zoneColocationEdgeResponseBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneColocationEdgeResponseBytesMetricName.String(),
 		Help: "Edge response bytes per colocation",
 	}, []string{"zone", "colocation", "host"},
 	)
 
-	zoneColocationRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_colocation_requests_total",
+	zoneColocationRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneColocationRequestsTotalMetricName.String(),
 		Help: "Total requests per colocation",
 	}, []string{"zone", "colocation", "host"},
 	)
 
-	zoneFirewallEventsCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_firewall_events_count",
+	zoneFirewallEventsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneFirewallEventsCountMetricName.String(),
 		Help: "Count of Firewall events",
 	}, []string{"zone", "action", "source", "host", "country"},
 	)
 
-	zoneHealthCheckEventsOriginCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_health_check_events_origin_count",
+	zoneHealthCheckEventsOriginCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneHealthCheckEventsOriginCountMetricName.String(),
 		Help: "Number of Heath check events per region per origin",
 	}, []string{"zone", "health_status", "origin_ip", "region", "fqdn"},
 	)
 
-	workerRequests = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_worker_requests_count",
+	workerRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: workerRequestsMetricName.String(),
 		Help: "Number of requests sent to worker by script name",
 	}, []string{"script_name"},
 	)
 
-	workerErrors = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_worker_errors_count",
+	workerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: workerErrorsMetricName.String(),
 		Help: "Number of errors by script name",
 	}, []string{"script_name"},
 	)
 
-	workerCPUTime = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_worker_cpu_time",
+	workerCPUTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: workerCPUTimeMetricName.String(),
 		Help: "CPU time quantiles by script name",
 	}, []string{"script_name", "quantile"},
 	)
 
-	workerDuration = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_worker_duration",
+	workerDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: workerDurationMetricName.String(),
 		Help: "Duration quantiles by script name (GB*s)",
 	}, []string{"script_name", "quantile"},
 	)
 
-	poolHealthStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_zone_pool_health_status",
+	poolHealthStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: poolHealthStatusMetricName.String(),
 		Help: "Reports the health of a pool, 1 for healthy, 0 for unhealthy.",
 	},
 		[]string{"zone", "load_balancer_name", "pool_name"},
 	)
 
-	poolRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "cloudflare_zone_pool_requests_total",
+	poolRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: poolRequestsTotalMetricName.String(),
 		Help: "Requests per pool",
 	},
 		[]string{"zone", "load_balancer_name", "pool_name", "origin_name"},
 	)
 )
+
+func buildAllMetricsSet() MetricsSet {
+	allMetricsSet := MetricsSet{}
+	allMetricsSet.Add(zoneRequestTotalMetricName)
+	allMetricsSet.Add(zoneRequestCachedMetricName)
+	allMetricsSet.Add(zoneRequestSSLEncryptedMetricName)
+	allMetricsSet.Add(zoneRequestContentTypeMetricName)
+	allMetricsSet.Add(zoneRequestCountryMetricName)
+	allMetricsSet.Add(zoneRequestHTTPStatusMetricName)
+	allMetricsSet.Add(zoneRequestBrowserMapMetricName)
+	allMetricsSet.Add(zoneRequestOriginStatusCountryHostMetricName)
+	allMetricsSet.Add(zoneRequestStatusCountryHostMetricName)
+	allMetricsSet.Add(zoneBandwidthTotalMetricName)
+	allMetricsSet.Add(zoneBandwidthCachedMetricName)
+	allMetricsSet.Add(zoneBandwidthSSLEncryptedMetricName)
+	allMetricsSet.Add(zoneBandwidthContentTypeMetricName)
+	allMetricsSet.Add(zoneBandwidthCountryMetricName)
+	allMetricsSet.Add(zoneThreatsTotalMetricName)
+	allMetricsSet.Add(zoneThreatsCountryMetricName)
+	allMetricsSet.Add(zoneThreatsTypeMetricName)
+	allMetricsSet.Add(zonePageviewsTotalMetricName)
+	allMetricsSet.Add(zoneUniquesTotalMetricName)
+	allMetricsSet.Add(zoneColocationVisitsMetricName)
+	allMetricsSet.Add(zoneColocationEdgeResponseBytesMetricName)
+	allMetricsSet.Add(zoneColocationRequestsTotalMetricName)
+	allMetricsSet.Add(zoneFirewallEventsCountMetricName)
+	allMetricsSet.Add(zoneHealthCheckEventsOriginCountMetricName)
+	allMetricsSet.Add(workerRequestsMetricName)
+	allMetricsSet.Add(workerErrorsMetricName)
+	allMetricsSet.Add(workerCPUTimeMetricName)
+	allMetricsSet.Add(workerDurationMetricName)
+	allMetricsSet.Add(poolHealthStatusMetricName)
+	allMetricsSet.Add(poolRequestsTotalMetricName)
+	return allMetricsSet
+}
+
+func buildDeniedMetricsSet(metricsDenylist []string) (MetricsSet, error) {
+	deniedMetricsSet := MetricsSet{}
+	allMetricsSet := buildAllMetricsSet()
+	for _, metric := range metricsDenylist {
+		if !allMetricsSet.Has(MetricName(metric)) {
+			return nil, fmt.Errorf("metric %s doesn't exists", metric)
+		}
+		deniedMetricsSet.Add(MetricName(metric))
+	}
+	return deniedMetricsSet, nil
+}
+
+func mustRegisterMetrics(deniedMetrics MetricsSet) {
+	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
+		prometheus.MustRegister(zoneRequestTotal)
+	}
+	if !deniedMetrics.Has(zoneRequestCachedMetricName) {
+		prometheus.MustRegister(zoneRequestCached)
+	}
+	if !deniedMetrics.Has(zoneRequestSSLEncryptedMetricName) {
+		prometheus.MustRegister(zoneRequestSSLEncrypted)
+	}
+	if !deniedMetrics.Has(zoneRequestContentTypeMetricName) {
+		prometheus.MustRegister(zoneRequestContentType)
+	}
+	if !deniedMetrics.Has(zoneRequestCountryMetricName) {
+		prometheus.MustRegister(zoneRequestCountry)
+	}
+	if !deniedMetrics.Has(zoneRequestHTTPStatusMetricName) {
+		prometheus.MustRegister(zoneRequestHTTPStatus)
+	}
+	if !deniedMetrics.Has(zoneRequestBrowserMapMetricName) {
+		prometheus.MustRegister(zoneRequestBrowserMap)
+	}
+	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostMetricName) {
+		prometheus.MustRegister(zoneRequestOriginStatusCountryHost)
+	}
+	if !deniedMetrics.Has(zoneRequestStatusCountryHostMetricName) {
+		prometheus.MustRegister(zoneRequestStatusCountryHost)
+	}
+	if !deniedMetrics.Has(zoneBandwidthTotalMetricName) {
+		prometheus.MustRegister(zoneBandwidthTotal)
+	}
+	if !deniedMetrics.Has(zoneBandwidthCachedMetricName) {
+		prometheus.MustRegister(zoneBandwidthCached)
+	}
+	if !deniedMetrics.Has(zoneBandwidthSSLEncryptedMetricName) {
+		prometheus.MustRegister(zoneBandwidthSSLEncrypted)
+	}
+	if !deniedMetrics.Has(zoneBandwidthContentTypeMetricName) {
+		prometheus.MustRegister(zoneBandwidthContentType)
+	}
+	if !deniedMetrics.Has(zoneBandwidthCountryMetricName) {
+		prometheus.MustRegister(zoneBandwidthCountry)
+	}
+	if !deniedMetrics.Has(zoneThreatsTotalMetricName) {
+		prometheus.MustRegister(zoneThreatsTotal)
+	}
+	if !deniedMetrics.Has(zoneThreatsCountryMetricName) {
+		prometheus.MustRegister(zoneThreatsCountry)
+	}
+	if !deniedMetrics.Has(zoneThreatsTypeMetricName) {
+		prometheus.MustRegister(zoneThreatsType)
+	}
+	if !deniedMetrics.Has(zonePageviewsTotalMetricName) {
+		prometheus.MustRegister(zonePageviewsTotal)
+	}
+	if !deniedMetrics.Has(zoneUniquesTotalMetricName) {
+		prometheus.MustRegister(zoneUniquesTotal)
+	}
+	if !deniedMetrics.Has(zoneColocationVisitsMetricName) {
+		prometheus.MustRegister(zoneColocationVisits)
+	}
+	if !deniedMetrics.Has(zoneColocationEdgeResponseBytesMetricName) {
+		prometheus.MustRegister(zoneColocationEdgeResponseBytes)
+	}
+	if !deniedMetrics.Has(zoneColocationRequestsTotalMetricName) {
+		prometheus.MustRegister(zoneColocationRequestsTotal)
+	}
+	if !deniedMetrics.Has(zoneFirewallEventsCountMetricName) {
+		prometheus.MustRegister(zoneFirewallEventsCount)
+	}
+	if !deniedMetrics.Has(zoneHealthCheckEventsOriginCountMetricName) {
+		prometheus.MustRegister(zoneHealthCheckEventsOriginCount)
+	}
+	if !deniedMetrics.Has(workerRequestsMetricName) {
+		prometheus.MustRegister(workerRequests)
+	}
+	if !deniedMetrics.Has(workerErrorsMetricName) {
+		prometheus.MustRegister(workerErrors)
+	}
+	if !deniedMetrics.Has(workerCPUTimeMetricName) {
+		prometheus.MustRegister(workerCPUTime)
+	}
+	if !deniedMetrics.Has(workerDurationMetricName) {
+		prometheus.MustRegister(workerDuration)
+	}
+	if !deniedMetrics.Has(poolHealthStatusMetricName) {
+		prometheus.MustRegister(poolHealthStatus)
+	}
+	if !deniedMetrics.Has(poolRequestsTotalMetricName) {
+		prometheus.MustRegister(poolRequestsTotal)
+	}
+}
 
 func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 	wg.Add(1)
@@ -246,7 +436,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		for _, c := range cg {
 			zoneColocationVisits.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
 			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
-      		zoneColocationRequestsTotal.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Count))
+			zoneColocationRequestsTotal.With(prometheus.Labels{"zone": name, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Count))
 		}
 	}
 }
