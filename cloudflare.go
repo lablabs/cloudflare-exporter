@@ -255,7 +255,7 @@ func fetchAccounts() []cloudflare.Account {
 	}
 
 	ctx := context.Background()
-	a, _, err := api.Accounts(ctx, cloudflare.PaginationOptions{PerPage: 100})
+	a, _, err := api.Accounts(ctx, cloudflare.AccountsListParams{PaginationOptions: cloudflare.PaginationOptions{PerPage: 100}})
 	if err != nil {
 		log.Fatal(err)
 	}
