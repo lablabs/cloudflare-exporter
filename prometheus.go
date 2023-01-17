@@ -48,6 +48,8 @@ const (
 	workerDurationMetricName                     MetricName = "cloudflare_worker_duration"
 	poolHealthStatusMetricName                   MetricName = "cloudflare_zone_pool_health_status"
 	poolRequestsTotalMetricName                  MetricName = "cloudflare_zone_pool_requests_total"
+	logpushFailedJobsAccountMetricName           MetricName = "cloudflare_logpush_failed_jobs_account_count"
+	logpushFailedJobsZoneMetricName              MetricName = "cloudflare_logpush_failed_jobs_zone_count"
 )
 
 type MetricsSet map[MetricName]struct{}
@@ -244,6 +246,21 @@ var (
 	},
 		[]string{"zone", "load_balancer_name", "pool_name", "origin_name"},
 	)
+
+	// TODO: Update this to counter vec and use counts from the query to add
+	logpushFailedJobsAccount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: logpushFailedJobsAccountMetricName.String(),
+		Help: "Number of failed logpush jobs on the account level",
+	},
+		[]string{"destination", "job_id", "final"},
+	)
+
+	logpushFailedJobsZone = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: logpushFailedJobsZoneMetricName.String(),
+		Help: "Number of failed logpush jobs on the zone level",
+	},
+		[]string{"destination", "job_id", "final"},
+	)
 )
 
 func buildAllMetricsSet() MetricsSet {
@@ -278,6 +295,8 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(workerDurationMetricName)
 	allMetricsSet.Add(poolHealthStatusMetricName)
 	allMetricsSet.Add(poolRequestsTotalMetricName)
+	allMetricsSet.Add(logpushFailedJobsAccountMetricName)
+	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
 	return allMetricsSet
 }
 
@@ -384,6 +403,12 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	if !deniedMetrics.Has(poolRequestsTotalMetricName) {
 		prometheus.MustRegister(poolRequestsTotal)
 	}
+	if !deniedMetrics.Has(logpushFailedJobsAccountMetricName) {
+		prometheus.MustRegister(logpushFailedJobsAccount)
+	}
+	if !deniedMetrics.Has(logpushFailedJobsZoneMetricName) {
+		prometheus.MustRegister(logpushFailedJobsZone)
+	}
 }
 
 func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
@@ -409,6 +434,55 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "quantile": "P999"}).Set(float64(w.Quantiles.DurationP999))
 		}
 	}
+}
+
+func fetchLogpushAnalyticsForAccount(account cloudflare.Account, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	if cfgFreeTier {
+		return
+	}
+
+	r, err := fetchLogpushAccount(account.ID)
+
+	if err != nil {
+		return
+	}
+
+	for _, account := range r.Viewer.Accounts {
+		for _, LogpushHealthAdaptiveGroup := range account.LogpushHealthAdaptiveGroups {
+			logpushFailedJobsAccount.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType, "job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobId), "final": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+		}
+	}
+
+}
+
+func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	if cfgFreeTier {
+		return
+	}
+
+	zoneIDs := extractZoneIDs(filterNonFreePlanZones(zones))
+	if len(zoneIDs) == 0 {
+		return
+	}
+
+	r, err := fetchLogpushZone(zoneIDs)
+
+	if err != nil {
+		return
+	}
+
+	for _, zone := range r.Viewer.Zones {
+		for _, LogpushHealthAdaptiveGroup := range zone.LogpushHealthAdaptiveGroups {
+			logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType, "job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobId), "final": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+		}
+	}
+
 }
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
