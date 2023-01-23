@@ -108,6 +108,7 @@ func fetchMetrics() {
 
 	for _, a := range accounts {
 		go fetchWorkerAnalytics(a, &wg)
+		go fetchLogpushAnalyticsForAccount(a, &wg)
 	}
 
 	// Make requests in groups of cfgBatchSize to avoid rate limit
@@ -124,6 +125,7 @@ func fetchMetrics() {
 		go fetchZoneAnalytics(targetZones, &wg)
 		go fetchZoneColocationAnalytics(targetZones, &wg)
 		go fetchLoadBalancerAnalytics(targetZones, &wg)
+		go fetchLogpushAnalyticsForZone(targetZones, &wg)
 	}
 
 	wg.Wait()

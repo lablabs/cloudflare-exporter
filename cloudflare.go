@@ -37,6 +37,32 @@ type cloudflareResponseLb struct {
 	} `json:"viewer"`
 }
 
+type cloudflareResponseLogpushAccount struct {
+	Viewer struct {
+		Accounts []logpushResponse `json:"accounts"`
+	} `json:"viewer"`
+}
+
+type cloudflareResponseLogpushZone struct {
+	Viewer struct {
+		Zones []logpushResponse `json:"zones"`
+	} `json:"viewer"`
+}
+
+type logpushResponse struct {
+	LogpushHealthAdaptiveGroups []struct {
+		Count uint64 `json:"count"`
+
+		Dimensions struct {
+			Datetime        string `json:"datetime"`
+			DestinationType string `json:"destinationType"`
+			JobId           int    `json:"jobId"`
+			Status          int    `json:"status"`
+			Final           int    `json:"final"`
+		}
+	} `json:"logpushHealthAdaptiveGroups"`
+}
+
 type accountResp struct {
 	WorkersInvocationsAdaptive []struct {
 		Dimensions struct {
@@ -577,6 +603,114 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, error) {
+
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	s := 60 * time.Second
+	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
+
+	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
+		viewer {
+		  accounts(filter: {accountTag : $accountID }) {
+			logpushHealthAdaptiveGroups(
+			  filter: {
+				datetime_geq: $mintime
+				datetime_lt: $maxtime
+				status_neq: 200
+			  }
+			  limit: $limit
+			) {
+			  count
+			  dimensions {
+				jobId
+				status
+				destinationType
+				datetime
+				final
+			  }
+			}
+		  }
+		}
+	  }`)
+
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+
+	request.Var("accountID", accountID)
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+
+	ctx := context.Background()
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	var resp cloudflareResponseLogpushAccount
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) {
+
+	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	s := 60 * time.Second
+	now = now.Truncate(s)
+	now1mAgo := now.Add(-60 * time.Second)
+
+	request := graphql.NewRequest(`query($zoneIDs: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
+		viewer {
+			zones(filter: {zoneTag_in : $zoneIDs }) {
+			logpushHealthAdaptiveGroups(
+			  filter: {
+				datetime_geq: $mintime
+				datetime_lt: $maxtime
+				status_neq: 200
+			  }
+			  limit: $limit
+			) {
+			  count
+			  dimensions {
+				jobId
+				status
+				destinationType
+				datetime
+				final
+			  }
+			}
+		  }
+		}
+	  }`)
+
+	if len(cfgCfAPIToken) > 0 {
+		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	} else {
+		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
+		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+	}
+
+	request.Var("zoneIDs", zoneIDs)
+	request.Var("limit", 9999)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+
+	ctx := context.Background()
+	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	var resp cloudflareResponseLogpushZone
+	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	return &resp, nil
+
 }
 
 func findZoneName(zones []cloudflare.Zone, ID string) string {

@@ -100,6 +100,8 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_uniques_total Uniques per zone
 # HELP cloudflare_zone_pool_health_status Reports the health of a pool, 1 for healthy, 0 for unhealthy
 # HELP cloudflare_zone_pool_requests_total Requests per pool
+# HELP cloudflare_logpush_failed_jobs_account_count Number of failed logpush jobs on the account level
+# HELP cloudflare_logpush_failed_jobs_zone_count Number of failed logpush jobs on the zone level
 ```
 
 ## Helm chart repository
