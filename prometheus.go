@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/biter777/countries"
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/prometheus/client_golang/prometheus"
+	log "github.com/sirupsen/logrus"
 )
 
 type MetricName string
@@ -385,11 +387,11 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	}
 }
 
-func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
+func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup, lastSuccessfulTime *time.Time) {
 	wg.Add(1)
 	defer wg.Done()
 
-	r, err := fetchWorkerTotals(account.ID)
+	r, err := fetchWorkerTotals(account.ID, lastSuccessfulTime)
 	if err != nil {
 		return
 	}
@@ -410,7 +412,7 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
+func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup, lastSuccessfulTime *time.Time) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -424,7 +426,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchColoTotals(zoneIDs)
+	r, err := fetchColoTotals(zoneIDs, lastSuccessfulTime)
 	if err != nil {
 		return
 	}
@@ -441,7 +443,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
+func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup, lastSuccessfulTime *time.Time) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -455,129 +457,126 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchZoneTotals(zoneIDs)
+	r, err := fetchZoneTotals(zoneIDs, lastSuccessfulTime)
 	if err != nil {
 		return
 	}
 
-	for _, z := range r.Viewer.Zones {
-		name := findZoneName(zones, z.ZoneTag)
-		addHTTPGroups(&z, name)
-		addFirewallGroups(&z, name)
-		addHealthCheckGroups(&z, name)
-		addHTTPAdaptiveGroups(&z, name)
+	for i := range r.Viewer.Zones {
+		zone := &r.Viewer.Zones[i]
+		name := findZoneName(zones, zone.ZoneTag)
+		addHTTPGroups(zone, name)
+		addFirewallGroups(zone, name)
+		addHealthCheckGroups(zone, name)
+		addHTTPAdaptiveGroups(zone, name)
 	}
 }
 
 func addHTTPGroups(z *zoneResp, name string) {
-	// Nothing to do.
-	if len(z.HTTP1mGroups) == 0 {
-		return
+	log.Debug("len(z.HTTP1mGroups) = ", len(z.HTTP1mGroups))
+	for i := range z.HTTP1mGroups {
+		zt := &z.HTTP1mGroups[i]
+
+		zoneRequestTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Requests))
+		zoneRequestCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedRequests))
+		zoneRequestSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedRequests))
+
+		for _, ct := range zt.Sum.ContentType {
+			zoneRequestContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
+			zoneBandwidthContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
+		}
+
+		for _, country := range zt.Sum.Country {
+			c := countries.ByName(country.ClientCountryName)
+			region := c.Info().Region.Info().Name
+
+			zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
+			zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
+			zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
+		}
+
+		for _, status := range zt.Sum.ResponseStatus {
+			zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
+		}
+
+		for _, browser := range zt.Sum.BrowserMap {
+			zoneRequestBrowserMap.With(prometheus.Labels{"zone": name, "family": browser.UaBrowserFamily}).Add(float64(browser.PageViews))
+		}
+
+		zoneBandwidthTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Bytes))
+		zoneBandwidthCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedBytes))
+		zoneBandwidthSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedBytes))
+
+		zoneThreatsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Threats))
+
+		for _, t := range zt.Sum.ThreatPathing {
+			zoneThreatsType.With(prometheus.Labels{"zone": name, "type": t.Name}).Add(float64(t.Requests))
+		}
+
+		zonePageviewsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.PageViews))
+
+		// Uniques
+		zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Unique.Uniques))
 	}
-	zt := z.HTTP1mGroups[0]
-
-	zoneRequestTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Requests))
-	zoneRequestCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedRequests))
-	zoneRequestSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedRequests))
-
-	for _, ct := range zt.Sum.ContentType {
-		zoneRequestContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
-		zoneBandwidthContentType.With(prometheus.Labels{"zone": name, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
-	}
-
-	for _, country := range zt.Sum.Country {
-		c := countries.ByName(country.ClientCountryName)
-		region := c.Info().Region.Info().Name
-
-		zoneRequestCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
-		zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
-		zoneThreatsCountry.With(prometheus.Labels{"zone": name, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
-	}
-
-	for _, status := range zt.Sum.ResponseStatus {
-		zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
-	}
-
-	for _, browser := range zt.Sum.BrowserMap {
-		zoneRequestBrowserMap.With(prometheus.Labels{"zone": name, "family": browser.UaBrowserFamily}).Add(float64(browser.PageViews))
-	}
-
-	zoneBandwidthTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Bytes))
-	zoneBandwidthCached.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.CachedBytes))
-	zoneBandwidthSSLEncrypted.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.EncryptedBytes))
-
-	zoneThreatsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.Threats))
-
-	for _, t := range zt.Sum.ThreatPathing {
-		zoneThreatsType.With(prometheus.Labels{"zone": name, "type": t.Name}).Add(float64(t.Requests))
-	}
-
-	zonePageviewsTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Sum.PageViews))
-
-	// Uniques
-	zoneUniquesTotal.With(prometheus.Labels{"zone": name}).Add(float64(zt.Unique.Uniques))
 }
 
 func addFirewallGroups(z *zoneResp, name string) {
-	// Nothing to do.
-	if len(z.FirewallEventsAdaptiveGroups) == 0 {
-		return
-	}
-
-	for _, g := range z.FirewallEventsAdaptiveGroups {
+	log.Debug("len(z.FirewallEventsAdaptiveGroups) = ", len(z.FirewallEventsAdaptiveGroups))
+	for i := range z.FirewallEventsAdaptiveGroups {
+		firewallEventAdaptiveGroup := &z.FirewallEventsAdaptiveGroups[i]
 		zoneFirewallEventsCount.With(
 			prometheus.Labels{
 				"zone":    name,
-				"action":  g.Dimensions.Action,
-				"source":  g.Dimensions.Source,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-				"country": g.Dimensions.ClientCountryName,
-			}).Add(float64(g.Count))
+				"action":  firewallEventAdaptiveGroup.Dimensions.Action,
+				"source":  firewallEventAdaptiveGroup.Dimensions.Source,
+				"host":    firewallEventAdaptiveGroup.Dimensions.ClientRequestHTTPHost,
+				"country": firewallEventAdaptiveGroup.Dimensions.ClientCountryName,
+			}).Add(float64(firewallEventAdaptiveGroup.Count))
 	}
 }
 
 func addHealthCheckGroups(z *zoneResp, name string) {
-	if len(z.HealthCheckEventsAdaptiveGroups) == 0 {
-		return
-	}
-
-	for _, g := range z.HealthCheckEventsAdaptiveGroups {
+	log.Debug("len(z.HealthCheckEventsAdaptiveGroups) = ", len(z.HealthCheckEventsAdaptiveGroups))
+	for i := range z.HealthCheckEventsAdaptiveGroups {
+		healthCheckEventsAdaptiveGroup := &z.HealthCheckEventsAdaptiveGroups[i]
 		zoneHealthCheckEventsOriginCount.With(
 			prometheus.Labels{
 				"zone":          name,
-				"health_status": g.Dimensions.HealthStatus,
-				"origin_ip":     g.Dimensions.OriginIP,
-				"region":        g.Dimensions.Region,
-				"fqdn":          g.Dimensions.Fqdn,
-			}).Add(float64(g.Count))
+				"health_status": healthCheckEventsAdaptiveGroup.Dimensions.HealthStatus,
+				"origin_ip":     healthCheckEventsAdaptiveGroup.Dimensions.OriginIP,
+				"region":        healthCheckEventsAdaptiveGroup.Dimensions.Region,
+				"fqdn":          healthCheckEventsAdaptiveGroup.Dimensions.Fqdn,
+			}).Add(float64(healthCheckEventsAdaptiveGroup.Count))
 	}
 }
 
 func addHTTPAdaptiveGroups(z *zoneResp, name string) {
-
-	for _, g := range z.HTTPRequestsAdaptiveGroups {
+	log.Debug("len(z.HTTPRequestsAdaptiveGroups) = ", len(z.HTTPRequestsAdaptiveGroups))
+	for i := range z.HTTPRequestsAdaptiveGroups {
+		httpRequestsAdaptiveGroup := &z.HTTPRequestsAdaptiveGroups[i]
 		zoneRequestOriginStatusCountryHost.With(
 			prometheus.Labels{
 				"zone":    name,
-				"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-			}).Add(float64(g.Count))
+				"status":  strconv.Itoa(int(httpRequestsAdaptiveGroup.Dimensions.OriginResponseStatus)),
+				"country": httpRequestsAdaptiveGroup.Dimensions.ClientCountryName,
+				"host":    httpRequestsAdaptiveGroup.Dimensions.ClientRequestHTTPHost,
+			}).Add(float64(httpRequestsAdaptiveGroup.Count))
 	}
 
-	for _, g := range z.HTTPRequestsEdgeCountryHost {
+	log.Debug("len(z.HTTPRequestsEdgeCountryHost) = ", len(z.HTTPRequestsEdgeCountryHost))
+	for i := range z.HTTPRequestsEdgeCountryHost {
+		httpRequestsEdgeCountryHost := &z.HTTPRequestsEdgeCountryHost[i]
 		zoneRequestStatusCountryHost.With(
 			prometheus.Labels{
 				"zone":    name,
-				"status":  strconv.Itoa(int(g.Dimensions.EdgeResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-			}).Add(float64(g.Count))
+				"status":  strconv.Itoa(int(httpRequestsEdgeCountryHost.Dimensions.EdgeResponseStatus)),
+				"country": httpRequestsEdgeCountryHost.Dimensions.ClientCountryName,
+				"host":    httpRequestsEdgeCountryHost.Dimensions.ClientRequestHTTPHost,
+			}).Add(float64(httpRequestsEdgeCountryHost.Count))
 	}
-
 }
 
-func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
+func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup, lastSuccessfulTime *time.Time) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -591,7 +590,7 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	l, err := fetchLoadBalancerTotals(zoneIDs)
+	l, err := fetchLoadBalancerTotals(zoneIDs, lastSuccessfulTime)
 	if err != nil {
 		return
 	}
@@ -603,7 +602,7 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 }
 
 func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
-
+	log.Debug("len(z.LoadBalancingRequestsAdaptiveGroups) = ", len(z.LoadBalancingRequestsAdaptiveGroups))
 	for _, g := range z.LoadBalancingRequestsAdaptiveGroups {
 		poolRequestsTotal.With(
 			prometheus.Labels{
@@ -616,7 +615,7 @@ func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
 }
 
 func addLoadBalancingRequestsAdaptive(z *lbResp, name string) {
-
+	log.Debug("len(z.LoadBalancingRequestsAdaptive) = ", len(z.LoadBalancingRequestsAdaptive))
 	for _, g := range z.LoadBalancingRequestsAdaptive {
 		for _, p := range g.Pools {
 			poolHealthStatus.With(
@@ -627,5 +626,4 @@ func addLoadBalancingRequestsAdaptive(z *lbResp, name string) {
 				}).Set(float64(p.Healthy))
 		}
 	}
-
 }

@@ -221,6 +221,11 @@ type lbResp struct {
 	ZoneTag string `json:"zoneTag"`
 }
 
+func getTruncatedNow() time.Time {
+	// truncate datetime down to YYYY-mm-dd HH:MM:00.000
+	return time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).Truncate(time.Minute).UTC()
+}
+
 func fetchZones() []cloudflare.Zone {
 	var api *cloudflare.API
 	var err error
@@ -263,18 +268,15 @@ func fetchAccounts() []cloudflare.Account {
 	return a
 }
 
-func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
+func fetchZoneTotals(zoneIDs []string, lastSuccessfulTime *time.Time) (*cloudflareResponse, error) {
+	truncatedNow := getTruncatedNow()
 
 	request := graphql.NewRequest(`
 query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	viewer {
 		zones(filter: { zoneTag_in: $zoneIDs }) {
 			zoneTag
-			httpRequests1mGroups(limit: $limit filter: { datetime: $maxtime }) {
+			httpRequests1mGroups(limit: $limit filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
 				uniq {
 					uniques
 				}
@@ -372,8 +374,8 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
 	}
 	request.Var("limit", 9999)
-	request.Var("maxtime", now)
-	request.Var("mintime", now1mAgo)
+	request.Var("maxtime", truncatedNow)
+	request.Var("mintime", *lastSuccessfulTime)
 	request.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
@@ -381,18 +383,16 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 
 	var resp cloudflareResponse
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+		log.Errorf("%s: from %s to %s", err, *lastSuccessfulTime, truncatedNow)
 		return nil, err
 	}
-
+	log.Debugf("successful from %s to %s", *lastSuccessfulTime, truncatedNow)
+	*lastSuccessfulTime = truncatedNow
 	return &resp, nil
 }
 
-func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
+func fetchColoTotals(zoneIDs []string, lastSuccessfulTime *time.Time) (*cloudflareResponseColo, error) {
+	truncatedNow := getTruncatedNow()
 
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
@@ -428,26 +428,24 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
 	}
 	request.Var("limit", 9999)
-	request.Var("maxtime", now)
-	request.Var("mintime", now1mAgo)
+	request.Var("maxtime", truncatedNow)
+	request.Var("mintime", *lastSuccessfulTime)
 	request.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 	var resp cloudflareResponseColo
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+		log.Errorf("%s: from %s to %s", err, *lastSuccessfulTime, truncatedNow)
 		return nil, err
 	}
-
+	log.Debugf("successful from %s to %s", *lastSuccessfulTime, truncatedNow)
+	*lastSuccessfulTime = truncatedNow
 	return &resp, nil
 }
 
-func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
+func fetchWorkerTotals(accountID string, lastSuccessfulTime *time.Time) (*cloudflareResponseAccts, error) {
+	truncatedNow := getTruncatedNow()
 
 	request := graphql.NewRequest(`
 	query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $limit: Int!) {
@@ -488,26 +486,24 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
 	}
 	request.Var("limit", 9999)
-	request.Var("maxtime", now)
-	request.Var("mintime", now1mAgo)
+	request.Var("maxtime", truncatedNow)
+	request.Var("mintime", *lastSuccessfulTime)
 	request.Var("accountID", accountID)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 	var resp cloudflareResponseAccts
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+		log.Errorf("%s: from %s to %s", err, *lastSuccessfulTime, truncatedNow)
 		return nil, err
 	}
-
+	log.Debugf("successful from %s to %s", *lastSuccessfulTime, truncatedNow)
+	*lastSuccessfulTime = truncatedNow
 	return &resp, nil
 }
 
-func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
+func fetchLoadBalancerTotals(zoneIDs []string, lastSuccessfulTime *time.Time) (*cloudflareResponseLb, error) {
+	truncatedNow := getTruncatedNow()
 
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
@@ -565,17 +561,19 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
 	}
 	request.Var("limit", 9999)
-	request.Var("maxtime", now)
-	request.Var("mintime", now1mAgo)
+	request.Var("maxtime", truncatedNow)
+	request.Var("mintime", *lastSuccessfulTime)
 	request.Var("zoneIDs", zoneIDs)
 
 	ctx := context.Background()
 	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 	var resp cloudflareResponseLb
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+		log.Errorf("%s: from %s to %s", err, *lastSuccessfulTime, truncatedNow)
 		return nil, err
 	}
+	log.Debugf("successful from %s to %s", *lastSuccessfulTime, truncatedNow)
+	*lastSuccessfulTime = truncatedNow
 	return &resp, nil
 }
 

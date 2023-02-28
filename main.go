@@ -26,6 +26,22 @@ var (
 	cfgFreeTier        = false
 	cfgBatchSize       = 10
 	cfgMetricsDenylist = ""
+	cfgLogLevel        = "info"
+)
+
+type AccountJob struct {
+	Account            cloudflare.Account
+	LastSuccessfulTime time.Time
+}
+
+type BatchedZonesJob struct {
+	Zones              []cloudflare.Zone
+	LastSuccessfulTime time.Time
+}
+
+var (
+	cfAccounts      []cloudflare.Account
+	cfFilteredZones []cloudflare.Zone
 )
 
 func getTargetZones() []string {
@@ -100,16 +116,34 @@ func filterExcludedZones(all []cloudflare.Zone, exclude []string) []cloudflare.Z
 	return filtered
 }
 
-func fetchMetrics() {
+func fetchMetrics(fetchWorkerAnalyticsJobs []AccountJob, fetchZoneAnalyticsJobs []BatchedZonesJob, fetchZoneColocationAnalyticsJobs []BatchedZonesJob, fetchLoadBalancerAnalyticsJobs []BatchedZonesJob) {
 	var wg sync.WaitGroup
-	zones := fetchZones()
-	accounts := fetchAccounts()
-	filteredZones := filterExcludedZones(filterZones(zones, getTargetZones()), getExcludedZones())
 
-	for _, a := range accounts {
-		go fetchWorkerAnalytics(a, &wg)
+	for i := range fetchWorkerAnalyticsJobs {
+		job := &fetchWorkerAnalyticsJobs[i]
+		go fetchWorkerAnalytics(job.Account, &wg, &job.LastSuccessfulTime)
 	}
 
+	for i := range fetchZoneAnalyticsJobs {
+		job := &fetchZoneAnalyticsJobs[i]
+		go fetchZoneAnalytics(job.Zones, &wg, &job.LastSuccessfulTime)
+	}
+	for i := range fetchZoneColocationAnalyticsJobs {
+		job := &fetchZoneColocationAnalyticsJobs[i]
+		go fetchZoneColocationAnalytics(job.Zones, &wg, &job.LastSuccessfulTime)
+	}
+	for i := range fetchLoadBalancerAnalyticsJobs {
+		job := &fetchLoadBalancerAnalyticsJobs[i]
+		go fetchLoadBalancerAnalytics(job.Zones, &wg, &job.LastSuccessfulTime)
+	}
+
+	wg.Wait()
+}
+
+func prepareExporterBatchJobs() []BatchedZonesJob {
+	jobs := []BatchedZonesJob{}
+	filteredZones := cfFilteredZones
+	lastNow := getTruncatedNow().Add(-time.Minute)
 	// Make requests in groups of cfgBatchSize to avoid rate limit
 	// 10 is the maximum amount of zones you can request at once
 	for len(filteredZones) > 0 {
@@ -117,16 +151,27 @@ func fetchMetrics() {
 		if len(filteredZones) < cfgBatchSize {
 			sliceLength = len(filteredZones)
 		}
-
 		targetZones := filteredZones[:sliceLength]
-		filteredZones = filteredZones[len(targetZones):]
-
-		go fetchZoneAnalytics(targetZones, &wg)
-		go fetchZoneColocationAnalytics(targetZones, &wg)
-		go fetchLoadBalancerAnalytics(targetZones, &wg)
+		jobs = append(jobs, BatchedZonesJob{
+			Zones:              targetZones,
+			LastSuccessfulTime: lastNow,
+		})
+		filteredZones = filteredZones[sliceLength:]
 	}
+	return jobs
+}
 
-	wg.Wait()
+func prepareAccountJobs() []AccountJob {
+	jobs := []AccountJob{}
+	lastSuccessfulTime := getTruncatedNow().Add(-time.Minute)
+	for i := range cfAccounts {
+		cfAccount := &cfAccounts[i]
+		jobs = append(jobs, AccountJob{
+			Account:            *cfAccount,
+			LastSuccessfulTime: lastSuccessfulTime,
+		})
+	}
+	return jobs
 }
 
 func main() {
@@ -141,6 +186,7 @@ func main() {
 	flag.IntVar(&cfgBatchSize, "cf_batch_size", cfgBatchSize, "cloudflare zones batch size (1-10), defaults to 10")
 	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.StringVar(&cfgMetricsDenylist, "metrics_denylist", cfgMetricsDenylist, "metrics to not expose, comma delimited list")
+	flag.StringVar(&cfgLogLevel, "log_level", cfgLogLevel, "log level, default to warning")
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
@@ -148,10 +194,13 @@ func main() {
 	if cfgBatchSize < 1 || cfgBatchSize > 10 {
 		log.Fatal("CF_BATCH_SIZE must be between 1 and 10")
 	}
-	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter := new(log.JSONFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05.000"
 	log.SetFormatter(customFormatter)
-	customFormatter.FullTimestamp = true
+	log.SetReportCaller(true)
+	if parsedLogLevel, err := log.ParseLevel(cfgLogLevel); err == nil {
+		log.SetLevel(parsedLogLevel)
+	}
 
 	metricsDenylist := []string{}
 	if len(cfgMetricsDenylist) > 0 {
@@ -163,9 +212,16 @@ func main() {
 	}
 	mustRegisterMetrics(deniedMetricsSet)
 
+	cfAccounts = fetchAccounts()
+	cfFilteredZones = filterExcludedZones(filterZones(fetchZones(), getTargetZones()), getExcludedZones())
 	go func() {
-		for ; true; <-time.NewTicker(60 * time.Second).C {
-			go fetchMetrics()
+		fetchWorkerAnalyticsJobs := prepareAccountJobs()
+		fetchZoneAnalyticsJobs := prepareExporterBatchJobs()
+		fetchZoneColocationAnalyticsJobs := prepareExporterBatchJobs()
+		fetchLoadBalancerAnalyticsJobs := prepareExporterBatchJobs()
+
+		for ; true; <-time.NewTicker(time.Minute).C {
+			go fetchMetrics(fetchWorkerAnalyticsJobs, fetchZoneAnalyticsJobs, fetchZoneColocationAnalyticsJobs, fetchLoadBalancerAnalyticsJobs)
 		}
 	}()
 
