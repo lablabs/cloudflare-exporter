@@ -27,6 +27,8 @@ Required authentication scopes:
 - `Account.Account Analytics:Read` is required for Worker metrics
 - `Account Settings:Read` is required for Worker metrics (for listing accessible accounts, scraping all available
   Workers included in authentication scope)
+- `Firewall Services:Read` is required to fetch zone rule name for `cloudflare_zone_firewall_events_count` metric
+- `Account. Account Rulesets:Read` is required to fetch account rule name for `cloudflare_zone_firewall_events_count` metric
 
 To authenticate this way, only set `CF_API_TOKEN` (omit `CF_API_EMAIL` and `CF_API_KEY`)
 

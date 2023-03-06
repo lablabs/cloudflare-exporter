@@ -142,6 +142,7 @@ type zoneResp struct {
 		Dimensions struct {
 			Action                string `json:"action"`
 			Source                string `json:"source"`
+			RuleId                string `json:"ruleId"`
 			ClientCountryName     string `json:"clientCountryName"`
 			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
@@ -242,6 +243,33 @@ func fetchZones() []cloudflare.Zone {
 	return z
 }
 
+func fetchFirewallRules(zoneId string) map[string]string {
+	var api *cloudflare.API
+	var err error
+	if len(cfgCfAPIToken) > 0 {
+		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	} else {
+		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
+	listOfRules, _, err := api.FirewallRules(ctx,
+		cloudflare.ZoneIdentifier(zoneId),
+		cloudflare.FirewallRuleListParams{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	firewallRulesMap := make(map[string]string)
+
+	for _, rule := range listOfRules {
+		firewallRulesMap[rule.ID] = rule.Description
+	}
+	return firewallRulesMap
+}
+
 func fetchAccounts() []cloudflare.Account {
 	var api *cloudflare.API
 	var err error
@@ -332,6 +360,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 				dimensions {
 				  action
 				  source
+				  ruleId
 				  clientRequestHTTPHost
 				  clientCountryName
 				}
