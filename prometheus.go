@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/biter777/countries"
@@ -197,7 +198,7 @@ var (
 	zoneFirewallEventsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: zoneFirewallEventsCountMetricName.String(),
 		Help: "Count of Firewall events",
-	}, []string{"zone", "action", "source", "host", "country"},
+	}, []string{"zone", "action", "source", "rule", "host", "country"},
 	)
 
 	zoneHealthCheckEventsOriginCount = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -523,17 +524,27 @@ func addFirewallGroups(z *zoneResp, name string) {
 	if len(z.FirewallEventsAdaptiveGroups) == 0 {
 		return
 	}
-
+	rulesMap := fetchFirewallRules(z.ZoneTag)
 	for _, g := range z.FirewallEventsAdaptiveGroups {
 		zoneFirewallEventsCount.With(
 			prometheus.Labels{
 				"zone":    name,
 				"action":  g.Dimensions.Action,
 				"source":  g.Dimensions.Source,
+				"rule":    normalizeRuleName(rulesMap[g.Dimensions.RuleId]),
 				"host":    g.Dimensions.ClientRequestHTTPHost,
 				"country": g.Dimensions.ClientCountryName,
 			}).Add(float64(g.Count))
 	}
+}
+
+func normalizeRuleName(initialText string) string {
+	maxLength := 200
+	nonSpaceName := strings.ReplaceAll(strings.ToLower(initialText), " ", "_")
+	if len(nonSpaceName) > maxLength {
+		return nonSpaceName[:maxLength]
+	}
+	return nonSpaceName
 }
 
 func addHealthCheckGroups(z *zoneResp, name string) {
