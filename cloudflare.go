@@ -267,6 +267,23 @@ func fetchFirewallRules(zoneId string) map[string]string {
 	for _, rule := range listOfRules {
 		firewallRulesMap[rule.ID] = rule.Description
 	}
+
+	listOfRulesets, err := api.ListZoneRulesets(ctx, zoneId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, rulesetDesc := range listOfRulesets {
+		if rulesetDesc.Phase == "http_request_firewall_managed" {
+			ruleset, err := api.GetZoneRuleset(ctx, zoneId, rulesetDesc.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, rule := range ruleset.Rules {
+				firewallRulesMap[rule.ID] = rule.Description
+			}
+		}
+	}
+
 	return firewallRulesMap
 }
 
