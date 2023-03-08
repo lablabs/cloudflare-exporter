@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/cloudflare/cloudflare-go"
@@ -156,6 +157,16 @@ type zoneResp struct {
 		} `json:"dimensions"`
 	} `json:"httpRequestsAdaptiveGroups"`
 
+	HTTPRequestsClientRequestPath []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			OriginResponseStatus        uint16 `json:"originResponseStatus"`
+			ClientRequestHTTPHost       string `json:"clientRequestHTTPHost"`
+			ClientRequestPath           string `json:"clientRequestPath"`
+			ClientRequestHTTPMethodName string `json:"clientRequestHTTPMethodName"`
+		} `json:"dimensions"`
+	} `json:"httpRequestsClientRequestPath"`
+
 	HTTPRequestsEdgeCountryHost []struct {
 		Count      uint64 `json:"count"`
 		Dimensions struct {
@@ -269,8 +280,8 @@ func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
 
-	request := graphql.NewRequest(`
-query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+	query := `
+query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!, $httpRequestsClientRequestPathFilter: ZoneHttpRequestsAdaptiveGroupsFilter_InputObject!) {
 	viewer {
 		zones(filter: { zoneTag_in: $zoneIDs }) {
 			zoneTag
@@ -342,6 +353,32 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 					originResponseStatus
 					clientCountryName
 					clientRequestHTTPHost
+		
+				}
+			}
+			httpRequestsClientRequestPath: httpRequestsAdaptiveGroups(
+				limit: 100, 
+				filter: $httpRequestsClientRequestPathFilter,
+				orderBy: [count_DESC]) 
+			{
+				count
+				avg {
+					originResponseDurationMs
+					sampleInterval
+				}
+				ratio {
+					status4xx
+					status5xx
+				}
+				sum {
+					edgeResponseBytes
+					visits
+				}
+				dimensions {
+					originResponseStatus
+					clientRequestPath
+					clientRequestHTTPHost
+					clientRequestHTTPMethodName
 				}
 			}
 			httpRequestsEdgeCountryHost: httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
@@ -363,14 +400,32 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 			}
 		}
 	}
-}
-`)
+}`
+
+	request := graphql.NewRequest(query)
 	if len(cfgCfAPIToken) > 0 {
 		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
 	} else {
 		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
 		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
 	}
+
+	var httpRequestsClientRequestPathFilter map[string]interface{}
+
+	err := json.Unmarshal([]byte(cfgClientRequestPathFilters), &httpRequestsClientRequestPathFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	httpRequestsClientRequestPathFilter["AND"] = append(
+		httpRequestsClientRequestPathFilter["AND"].([]interface{}),
+		map[string]time.Time{
+			"datetime_geq": now1mAgo,
+			"datetime_lt":  now,
+		},
+	)
+
+	request.Var("httpRequestsClientRequestPathFilter", httpRequestsClientRequestPathFilter)
 	request.Var("limit", 9999)
 	request.Var("maxtime", now)
 	request.Var("mintime", now1mAgo)

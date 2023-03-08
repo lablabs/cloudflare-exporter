@@ -15,17 +15,18 @@ import (
 )
 
 var (
-	cfgListen          = ":8080"
-	cfgCfAPIKey        = ""
-	cfgCfAPIEmail      = ""
-	cfgCfAPIToken      = ""
-	cfgMetricsPath     = "/metrics"
-	cfgZones           = ""
-	cfgExcludeZones    = ""
-	cfgScrapeDelay     = 300
-	cfgFreeTier        = false
-	cfgBatchSize       = 10
-	cfgMetricsDenylist = ""
+	cfgListen                   = ":8080"
+	cfgCfAPIKey                 = ""
+	cfgCfAPIEmail               = ""
+	cfgCfAPIToken               = ""
+	cfgMetricsPath              = "/metrics"
+	cfgZones                    = ""
+	cfgExcludeZones             = ""
+	cfgScrapeDelay              = 300
+	cfgFreeTier                 = false
+	cfgBatchSize                = 10
+	cfgMetricsDenylist          = ""
+	cfgClientRequestPathFilters = ""
 )
 
 func getTargetZones() []string {
@@ -139,8 +140,10 @@ func main() {
 	flag.StringVar(&cfgExcludeZones, "cf_exclude_zones", cfgExcludeZones, "cloudflare zones to exclude, comma delimited list")
 	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay, "scrape delay in seconds, defaults to 300")
 	flag.IntVar(&cfgBatchSize, "cf_batch_size", cfgBatchSize, "cloudflare zones batch size (1-10), defaults to 10")
+	flag.StringVar(&cfgClientRequestPathFilters, "cf_path_filters", cfgClientRequestPathFilters, "add filters to path query")
 	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.StringVar(&cfgMetricsDenylist, "metrics_denylist", cfgMetricsDenylist, "metrics to not expose, comma delimited list")
+
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
