@@ -353,27 +353,14 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!, $htt
 					originResponseStatus
 					clientCountryName
 					clientRequestHTTPHost
-		
 				}
 			}
 			httpRequestsClientRequestPath: httpRequestsAdaptiveGroups(
-				limit: 100, 
+				limit: $limit,
 				filter: $httpRequestsClientRequestPathFilter,
-				orderBy: [count_DESC]) 
-			{
+				orderBy: [count_DESC]
+			) {
 				count
-				avg {
-					originResponseDurationMs
-					sampleInterval
-				}
-				ratio {
-					status4xx
-					status5xx
-				}
-				sum {
-					edgeResponseBytes
-					visits
-				}
 				dimensions {
 					originResponseStatus
 					clientRequestPath
