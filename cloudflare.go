@@ -388,7 +388,6 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!, $htt
 		}
 	}
 }`
-
 	request := graphql.NewRequest(query)
 	if len(cfgCfAPIToken) > 0 {
 		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
@@ -412,6 +411,12 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!, $htt
 			"datetime_lt":  now,
 		},
 	)
+
+	if log.DebugLevel == log.GetLevel() {
+		log.Debug(httpRequestsClientRequestPathFilter)
+		f, _ := json.Marshal(httpRequestsClientRequestPathFilter)
+		log.Debug(string(f))
+	}
 
 	request.Var("httpRequestsClientRequestPathFilter", httpRequestsClientRequestPathFilter)
 	request.Var("limit", 9999)
