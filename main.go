@@ -27,6 +27,7 @@ var (
 	cfgBatchSize                = 10
 	cfgMetricsDenylist          = ""
 	cfgClientRequestPathFilters = ""
+	cfgLogLevel                 = "info"
 )
 
 func getTargetZones() []string {
@@ -143,6 +144,7 @@ func main() {
 	flag.StringVar(&cfgClientRequestPathFilters, "cf_path_filters", cfgClientRequestPathFilters, "add filters to path query")
 	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.StringVar(&cfgMetricsDenylist, "metrics_denylist", cfgMetricsDenylist, "metrics to not expose, comma delimited list")
+	flag.StringVar(&cfgLogLevel, "log_level", cfgLogLevel, "log level, defaults to info")
 
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
@@ -155,6 +157,16 @@ func main() {
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	log.SetFormatter(customFormatter)
 	customFormatter.FullTimestamp = true
+
+	log_level, err := log.ParseLevel(cfgLogLevel)
+	if err != nil {
+		log_level = log.InfoLevel
+	}
+
+	log.SetLevel(log_level)
+	log.WithFields(log.Fields{
+		"log_level": log_level,
+	}).Info()
 
 	metricsDenylist := []string{}
 	if len(cfgMetricsDenylist) > 0 {
