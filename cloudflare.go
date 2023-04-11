@@ -401,6 +401,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!, $htt
 
 	err := json.Unmarshal([]byte(cfgClientRequestPathFilters), &httpRequestsClientRequestPathFilter)
 	if err != nil {
+		log.Error(err)
 		return nil, err
 	}
 
