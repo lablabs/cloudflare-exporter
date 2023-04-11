@@ -15,17 +15,19 @@ import (
 )
 
 var (
-	cfgListen          = ":8080"
-	cfgCfAPIKey        = ""
-	cfgCfAPIEmail      = ""
-	cfgCfAPIToken      = ""
-	cfgMetricsPath     = "/metrics"
-	cfgZones           = ""
-	cfgExcludeZones    = ""
-	cfgScrapeDelay     = 300
-	cfgFreeTier        = false
-	cfgBatchSize       = 10
-	cfgMetricsDenylist = ""
+	cfgListen                   = ":8080"
+	cfgCfAPIKey                 = ""
+	cfgCfAPIEmail               = ""
+	cfgCfAPIToken               = ""
+	cfgMetricsPath              = "/metrics"
+	cfgZones                    = ""
+	cfgExcludeZones             = ""
+	cfgScrapeDelay              = 300
+	cfgFreeTier                 = false
+	cfgBatchSize                = 10
+	cfgMetricsDenylist          = ""
+	cfgClientRequestPathFilters = ""
+	cfgLogLevel                 = "info"
 )
 
 func getTargetZones() []string {
@@ -139,8 +141,11 @@ func main() {
 	flag.StringVar(&cfgExcludeZones, "cf_exclude_zones", cfgExcludeZones, "cloudflare zones to exclude, comma delimited list")
 	flag.IntVar(&cfgScrapeDelay, "scrape_delay", cfgScrapeDelay, "scrape delay in seconds, defaults to 300")
 	flag.IntVar(&cfgBatchSize, "cf_batch_size", cfgBatchSize, "cloudflare zones batch size (1-10), defaults to 10")
+	flag.StringVar(&cfgClientRequestPathFilters, "cf_path_filters", cfgClientRequestPathFilters, "add filters to path query")
 	flag.BoolVar(&cfgFreeTier, "free_tier", cfgFreeTier, "scrape only metrics included in free plan")
 	flag.StringVar(&cfgMetricsDenylist, "metrics_denylist", cfgMetricsDenylist, "metrics to not expose, comma delimited list")
+	flag.StringVar(&cfgLogLevel, "log_level", cfgLogLevel, "log level, defaults to info")
+
 	flag.Parse()
 	if !(len(cfgCfAPIToken) > 0 || (len(cfgCfAPIEmail) > 0 && len(cfgCfAPIKey) > 0)) {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
@@ -152,6 +157,16 @@ func main() {
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	log.SetFormatter(customFormatter)
 	customFormatter.FullTimestamp = true
+
+	log_level, err := log.ParseLevel(cfgLogLevel)
+	if err != nil {
+		log_level = log.InfoLevel
+	}
+
+	log.SetLevel(log_level)
+	log.WithFields(log.Fields{
+		"log_level": log_level,
+	}).Info()
 
 	metricsDenylist := []string{}
 	if len(cfgMetricsDenylist) > 0 {
