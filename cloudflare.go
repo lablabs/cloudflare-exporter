@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go"
+	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/machinebox/graphql"
 	log "github.com/sirupsen/logrus"
 )
@@ -759,14 +760,14 @@ func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) 
 
 }
 
-func findZoneName(zones []cloudflare.Zone, ID string) string {
+func findZoneAccountName(zones []cloudflare.Zone, ID string) (string, string) {
 	for _, z := range zones {
 		if z.ID == ID {
-			return z.Name
+			return z.Name, strings.ToLower(strings.ReplaceAll(z.Account.Name, " ", "-"))
 		}
 	}
 
-	return ""
+	return "", ""
 }
 
 func extractZoneIDs(zones []cloudflare.Zone) []string {
