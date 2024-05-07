@@ -428,9 +428,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	if err != nil {
 		return
 	}
-
 	for _, z := range r.Viewer.Zones {
-
 		cg := z.ColoGroups
 		name := findZoneName(zones, z.ZoneTag)
 		for _, c := range cg {
@@ -462,6 +460,8 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 	for _, z := range r.Viewer.Zones {
 		name := findZoneName(zones, z.ZoneTag)
+		z := z
+
 		addHTTPGroups(&z, name)
 		addFirewallGroups(&z, name)
 		addHealthCheckGroups(&z, name)
@@ -554,7 +554,6 @@ func addHealthCheckGroups(z *zoneResp, name string) {
 }
 
 func addHTTPAdaptiveGroups(z *zoneResp, name string) {
-
 	for _, g := range z.HTTPRequestsAdaptiveGroups {
 		zoneRequestOriginStatusCountryHost.With(
 			prometheus.Labels{
@@ -574,7 +573,6 @@ func addHTTPAdaptiveGroups(z *zoneResp, name string) {
 				"host":    g.Dimensions.ClientRequestHTTPHost,
 			}).Add(float64(g.Count))
 	}
-
 }
 
 func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -597,13 +595,14 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	}
 	for _, lb := range l.Viewer.Zones {
 		name := findZoneName(zones, lb.ZoneTag)
+		lb := lb
+
 		addLoadBalancingRequestsAdaptive(&lb, name)
 		addLoadBalancingRequestsAdaptiveGroups(&lb, name)
 	}
 }
 
 func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
-
 	for _, g := range z.LoadBalancingRequestsAdaptiveGroups {
 		poolRequestsTotal.With(
 			prometheus.Labels{
@@ -616,7 +615,6 @@ func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string) {
 }
 
 func addLoadBalancingRequestsAdaptive(z *lbResp, name string) {
-
 	for _, g := range z.LoadBalancingRequestsAdaptive {
 		for _, p := range g.Pools {
 			poolHealthStatus.With(
@@ -627,5 +625,4 @@ func addLoadBalancingRequestsAdaptive(z *lbResp, name string) {
 				}).Set(float64(p.Healthy))
 		}
 	}
-
 }

@@ -169,14 +169,22 @@ func main() {
 		}
 	}()
 
-	//This section will start the HTTP server and expose
-	//any metrics on the /metrics endpoint.
+	// This section will start the HTTP server and expose
+	// any metrics on the /metrics endpoint.
 	if !strings.HasPrefix(cfgMetricsPath, "/") {
 		cfgMetricsPath = "/" + cfgMetricsPath
 	}
+
 	http.Handle(cfgMetricsPath, promhttp.Handler())
 	h := health.New(health.Health{})
 	http.HandleFunc("/health", h.Handler)
+
 	log.Info("Beginning to serve on port", cfgListen, ", metrics path ", cfgMetricsPath)
-	log.Fatal(http.ListenAndServe(cfgListen, nil))
+
+	server := &http.Server{
+		Addr:              cfgListen,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	log.Fatal(server.ListenAndServe())
 }

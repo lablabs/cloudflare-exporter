@@ -20,11 +20,16 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       # See https://github.com/helm/chart-releaser-action/issues/6
+      # - name: Install Helm
+      #   run: |
+      #     curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+      #     chmod 700 get_helm.sh
+      #     ./get_helm.sh
+
       - name: Install Helm
-        run: |
-          curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
-          chmod 700 get_helm.sh
-          ./get_helm.sh
+        uses: azure/setup-helm@v4.2.0
+        with:
+          version: 3.14.0
 
       - name: Add dependency chart repos
         run: |
@@ -32,6 +37,6 @@ jobs:
           helm repo add incubator https://charts.helm.sh/incubator
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.0.0
+        uses: helm/chart-releaser-action@v1.6.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
