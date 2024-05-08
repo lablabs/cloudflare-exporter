@@ -252,7 +252,7 @@ var (
 		Name: logpushFailedJobsAccountMetricName.String(),
 		Help: "Number of failed logpush jobs on the account level",
 	},
-		[]string{"destination", "job_id", "final"},
+		[]string{"account", "destination", "job_id", "final"},
 	)
 
 	logpushFailedJobsZone = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -453,12 +453,14 @@ func fetchLogpushAnalyticsForAccount(account cloudflare.Account, wg *sync.WaitGr
 		return
 	}
 
-	for _, account := range r.Viewer.Accounts {
-		for _, LogpushHealthAdaptiveGroup := range account.LogpushHealthAdaptiveGroups {
-			logpushFailedJobsAccount.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType, "job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobId), "final": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+	for _, acc := range r.Viewer.Accounts {
+		for _, LogpushHealthAdaptiveGroup := range acc.LogpushHealthAdaptiveGroups {
+			logpushFailedJobsAccount.With(prometheus.Labels{"account": account.ID,
+				"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
+				"job_id":      strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
+				"final":       strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
 		}
 	}
-
 }
 
 func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -482,10 +484,11 @@ func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 	for _, zone := range r.Viewer.Zones {
 		for _, LogpushHealthAdaptiveGroup := range zone.LogpushHealthAdaptiveGroups {
-			logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType, "job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobId), "final": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
+				"job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
+				"final":  strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
 		}
 	}
-
 }
 
 func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
@@ -610,7 +613,7 @@ func addFirewallGroups(z *zoneResp, name string, account string) {
 				"account": account,
 				"action":  g.Dimensions.Action,
 				"source":  g.Dimensions.Source,
-				"rule":    normalizeRuleName(rulesMap[g.Dimensions.RuleId]),
+				"rule":    normalizeRuleName(rulesMap[g.Dimensions.RuleID]),
 				"host":    g.Dimensions.ClientRequestHTTPHost,
 				"country": g.Dimensions.ClientCountryName,
 			}).Add(float64(g.Count))

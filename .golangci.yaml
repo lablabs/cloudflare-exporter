@@ -1,6 +1,7 @@
 linters:
   enable:
-    - megacheck
+    - gosimple
+    - staticcheck
     - govet
 
     - asciicheck

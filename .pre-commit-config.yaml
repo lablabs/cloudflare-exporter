@@ -1,12 +1,19 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+    rev: v4.6.0
     hooks:
-      - id: trailing-whitespace
       - id: check-merge-conflict
+      - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: check-ast
+      - id: check-case-conflict
+      - id: debug-statements
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.43.0
+    rev: v1.58.0
     hooks:
       - id: golangci-lint
