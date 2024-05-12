@@ -8,6 +8,7 @@ import (
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/machinebox/graphql"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -252,10 +253,10 @@ type lbResp struct {
 func fetchZones() []cloudflare.Zone {
 	var api *cloudflare.API
 	var err error
-	if len(cfgCfAPIToken) > 0 {
-		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
 	} else {
-		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -273,10 +274,10 @@ func fetchZones() []cloudflare.Zone {
 func fetchFirewallRules(zoneID string) map[string]string {
 	var api *cloudflare.API
 	var err error
-	if len(cfgCfAPIToken) > 0 {
-		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
 	} else {
-		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -317,10 +318,10 @@ func fetchFirewallRules(zoneID string) map[string]string {
 func fetchAccounts() []cloudflare.Account {
 	var api *cloudflare.API
 	var err error
-	if len(cfgCfAPIToken) > 0 {
-		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
 	} else {
-		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -336,7 +337,7 @@ func fetchAccounts() []cloudflare.Account {
 }
 
 func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -438,11 +439,11 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	}
 }
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 	request.Var("limit", 9999)
 	request.Var("maxtime", now)
@@ -462,7 +463,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 }
 
 func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -494,11 +495,11 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 			}
 		}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 	request.Var("limit", 9999)
 	request.Var("maxtime", now)
@@ -517,7 +518,7 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 }
 
 func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -554,11 +555,11 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 		}
 	}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 	request.Var("limit", 9999)
 	request.Var("maxtime", now)
@@ -577,7 +578,7 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 }
 
 func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -631,11 +632,11 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 		}
 	}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 	request.Var("limit", 9999)
 	request.Var("maxtime", now)
@@ -653,7 +654,7 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 }
 
 func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -682,11 +683,11 @@ func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, e
 		}
 	  }`)
 
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 
 	request.Var("accountID", accountID)
@@ -705,7 +706,7 @@ func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, e
 }
 
 func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
+	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
 	s := 60 * time.Second
 	now = now.Truncate(s)
 	now1mAgo := now.Add(-60 * time.Second)
@@ -734,11 +735,11 @@ func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) 
 		}
 	  }`)
 
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
+	if len(viper.GetString("cf_api_token")) > 0 {
+		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
 	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
+		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
+		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
 	}
 
 	request.Var("zoneIDs", zoneIDs)

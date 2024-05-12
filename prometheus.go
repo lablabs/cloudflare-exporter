@@ -9,6 +9,7 @@ import (
 	"github.com/biter777/countries"
 	cloudflare "github.com/cloudflare/cloudflare-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/viper"
 )
 
 type MetricName string
@@ -443,7 +444,7 @@ func fetchLogpushAnalyticsForAccount(account cloudflare.Account, wg *sync.WaitGr
 	wg.Add(1)
 	defer wg.Done()
 
-	if cfgFreeTier {
+	if viper.GetBool("free_tier") {
 		return
 	}
 
@@ -467,7 +468,7 @@ func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
 
-	if cfgFreeTier {
+	if viper.GetBool("free_tier") {
 		return
 	}
 
@@ -496,7 +497,7 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// Colocation metrics are not available in non-enterprise zones
-	if cfgFreeTier {
+	if viper.GetBool("free_tier") {
 		return
 	}
 
@@ -525,7 +526,7 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// None of the below referenced metrics are available in the free tier
-	if cfgFreeTier {
+	if viper.GetBool("free_tier") {
 		return
 	}
 
@@ -676,7 +677,7 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// None of the below referenced metrics are available in the free tier
-	if cfgFreeTier {
+	if viper.GetBool("free_tier") {
 		return
 	}
 

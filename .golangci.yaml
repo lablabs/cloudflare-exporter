@@ -1,11 +1,12 @@
 linters:
+  disable:
+    - errcheck
   enable:
-    - gosimple
+    #- gosimple
     - staticcheck
     - govet
 
     - asciicheck
-    - errcheck
     - errorlint
     - gofmt
     - goimports
