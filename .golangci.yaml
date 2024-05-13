@@ -1,9 +1,25 @@
 linters:
+  disable:
+    - errcheck
   enable:
-    - megacheck
-    - gofmt
+    #- gosimple
+    - staticcheck
     - govet
-    - revive # replacement for golint
+
+    - asciicheck
+    - errorlint
+    - gofmt
+    - goimports
+    - gosec
+    #    - gocritic
+    - importas
+    #    - prealloc
+    - revive
+    - misspell
+    - stylecheck
+    - unconvert
+    - unused
+    - whitespace
 
 linters-settings:
   gofmt:

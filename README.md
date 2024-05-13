@@ -27,6 +27,8 @@ Required authentication scopes:
 - `Account.Account Analytics:Read` is required for Worker metrics
 - `Account Settings:Read` is required for Worker metrics (for listing accessible accounts, scraping all available
   Workers included in authentication scope)
+- `Firewall Services:Read` is required to fetch zone rule name for `cloudflare_zone_firewall_events_count` metric
+- `Account. Account Rulesets:Read` is required to fetch account rule name for `cloudflare_zone_firewall_events_count` metric
 
 To authenticate this way, only set `CF_API_TOKEN` (omit `CF_API_EMAIL` and `CF_API_KEY`)
 
@@ -100,6 +102,8 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_uniques_total Uniques per zone
 # HELP cloudflare_zone_pool_health_status Reports the health of a pool, 1 for healthy, 0 for unhealthy
 # HELP cloudflare_zone_pool_requests_total Requests per pool
+# HELP cloudflare_logpush_failed_jobs_account_count Number of failed logpush jobs on the account level
+# HELP cloudflare_logpush_failed_jobs_zone_count Number of failed logpush jobs on the zone level
 ```
 
 ## Helm chart repository

@@ -36,6 +36,11 @@ Common labels
 {{- define "cloudflare-exporter.labels" -}}
 helm.sh/chart: {{ include "cloudflare-exporter.chart" . }}
 {{ include "cloudflare-exporter.selectorLabels" . }}
+{{- if .Values.labels }}
+{{- range $key, $value := .Values.labels }}
+{{ $key }}: "{{ $value }}"
+{{- end }}
+{{- end }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}

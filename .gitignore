@@ -25,3 +25,5 @@ vendor/
 *.swp
 
 .idea/
+.env
+venom*

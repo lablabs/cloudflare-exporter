@@ -1,0 +1,25 @@
+name: Cloudflare exporter testsuite
+vars:
+  basePort: "8081"
+  baseUrl: "http://localhost"
+testcases:
+  - name: Check Health endpoint
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseUrl}}:{{.basePort}}/health"
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldNotBeEmpty
+
+  - name: Get Cloudflare metrics test case
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseUrl}}:{{.basePort}}/metrics"
+        assertions:
+          - result.body ShouldContainSubstring cloudflare_zone_threats_total
+          - result.body ShouldContainSubstring promhttp_metric_handler_requests_in_flight
+          - result.body ShouldContainSubstring go_gc_duration_seconds_count
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldNotBeEmpty

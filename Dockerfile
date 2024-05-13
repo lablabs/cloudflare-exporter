@@ -9,7 +9,7 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 
 RUN go get -d -v
-RUN CGO_ENABLED=0 GOOS=linux go build -o cloudflare_exporter .
+RUN CGO_ENABLED=0 GOOS=linux go build --ldflags '-w -s -extldflags "-static"' -o cloudflare_exporter .
 
 FROM alpine:3.18
 
