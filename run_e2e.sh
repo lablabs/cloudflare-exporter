@@ -7,7 +7,7 @@ source .env
 # Test if we have cloudflare api/key variables configured.
 
 # Run cloudflare-exporter
-nohup ./cloudflare_exporter --listen="${baseUrl}" >/tmp/cloudflare-expoter-test.out 2>&1 &
+nohup ./cloudflare_exporter --listen="${baseUrl}" >/tmp/cloudflare-exporter-test.out 2>&1 &
 export pid=$!
 sleep 5
 

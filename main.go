@@ -33,8 +33,8 @@ import (
 func getTargetZones() []string {
 	var zoneIDs []string
 
-	if len(viper.GetString("cfg_zones")) > 0 {
-		zoneIDs = strings.Split(viper.GetString("cfg_zones"), ",")
+	if len(viper.GetString("cf_zones")) > 0 {
+		zoneIDs = strings.Split(viper.GetString("cf_zones"), ",")
 	} else {
 		// deprecated
 		for _, e := range os.Environ() {
