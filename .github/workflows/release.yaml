@@ -27,7 +27,7 @@ jobs:
       #     ./get_helm.sh
 
       - name: Install Helm
-        uses: azure/setup-helm@v4.2.0
+        uses: azure/setup-helm@v4
         with:
           version: 3.14.0
 
