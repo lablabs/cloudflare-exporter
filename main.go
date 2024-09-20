@@ -160,11 +160,9 @@ func runExpoter() {
 	if len(viper.GetString("metrics_denylist")) > 0 {
 		metricsDenylist = strings.Split(viper.GetString("metrics_denylist"), ",")
 	}
-	deniedMetricsSet, err := buildDeniedMetricsSet(metricsDenylist)
-	if err != nil {
-		log.Fatal(err)
-	}
-	mustRegisterMetrics(deniedMetricsSet)
+
+	disableDeniedMetrics(metricsDenylist)
+	mustRegisterMetrics()
 
 	go func() {
 		for ; true; <-time.NewTicker(60 * time.Second).C {

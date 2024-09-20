@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,350 +64,221 @@ func (ms MetricsSet) Add(mn MetricName) {
 }
 
 var (
-	// Requests
-	zoneRequestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestTotalMetricName.String(),
-		Help: "Number of requests for zone",
-	}, []string{"zone", "account"},
-	)
+	counterMetrics = map[MetricName]*prometheus.CounterVec{
+		// Requests
+		zoneRequestTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestTotalMetricName.String(),
+			Help: "Number of requests for zone",
+		}, []string{"zone", "account"},
+		),
 
-	zoneRequestCached = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestCachedMetricName.String(),
-		Help: "Number of cached requests for zone",
-	}, []string{"zone", "account"},
-	)
+		zoneRequestCachedMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestCachedMetricName.String(),
+			Help: "Number of cached requests for zone",
+		}, []string{"zone", "account"},
+		),
 
-	zoneRequestSSLEncrypted = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestSSLEncryptedMetricName.String(),
-		Help: "Number of encrypted requests for zone",
-	}, []string{"zone", "account"},
-	)
+		zoneRequestSSLEncryptedMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestSSLEncryptedMetricName.String(),
+			Help: "Number of encrypted requests for zone",
+		}, []string{"zone", "account"},
+		),
 
-	zoneRequestContentType = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestContentTypeMetricName.String(),
-		Help: "Number of request for zone per content type",
-	}, []string{"zone", "account", "content_type"},
-	)
+		zoneRequestContentTypeMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestContentTypeMetricName.String(),
+			Help: "Number of request for zone per content type",
+		}, []string{"zone", "account", "content_type"},
+		),
 
-	zoneRequestCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestCountryMetricName.String(),
-		Help: "Number of request for zone per country",
-	}, []string{"zone", "account", "country", "region"},
-	)
+		zoneRequestCountryMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestCountryMetricName.String(),
+			Help: "Number of request for zone per country",
+		}, []string{"zone", "account", "country", "region"},
+		),
 
-	zoneRequestHTTPStatus = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestHTTPStatusMetricName.String(),
-		Help: "Number of request for zone per HTTP status",
-	}, []string{"zone", "account", "status"},
-	)
+		zoneRequestHTTPStatusMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestHTTPStatusMetricName.String(),
+			Help: "Number of request for zone per HTTP status",
+		}, []string{"zone", "account", "status"},
+		),
 
-	zoneRequestBrowserMap = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestBrowserMapMetricName.String(),
-		Help: "Number of successful requests for HTML pages per zone",
-	}, []string{"zone", "account", "family"},
-	)
+		zoneRequestBrowserMapMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestBrowserMapMetricName.String(),
+			Help: "Number of successful requests for HTML pages per zone",
+		}, []string{"zone", "account", "family"},
+		),
 
-	zoneRequestOriginStatusCountryHost = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestOriginStatusCountryHostMetricName.String(),
-		Help: "Count of not cached requests for zone per origin HTTP status per country per host",
-	}, []string{"zone", "account", "status", "country", "host"},
-	)
+		zoneRequestOriginStatusCountryHostMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestOriginStatusCountryHostMetricName.String(),
+			Help: "Count of not cached requests for zone per origin HTTP status per country per host",
+		}, []string{"zone", "account", "status", "country", "host"},
+		),
+		zoneRequestStatusCountryHostMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneRequestStatusCountryHostMetricName.String(),
+			Help: "Count of requests for zone per edge HTTP status per country per host",
+		}, []string{"zone", "account", "status", "country", "host"},
+		),
 
-	zoneRequestStatusCountryHost = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneRequestStatusCountryHostMetricName.String(),
-		Help: "Count of requests for zone per edge HTTP status per country per host",
-	}, []string{"zone", "account", "status", "country", "host"},
-	)
+		zoneBandwidthTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneBandwidthTotalMetricName.String(),
+			Help: "Total bandwidth per zone in bytes",
+		}, []string{"zone", "account"},
+		),
 
-	zoneBandwidthTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneBandwidthTotalMetricName.String(),
-		Help: "Total bandwidth per zone in bytes",
-	}, []string{"zone", "account"},
-	)
+		zoneBandwidthCachedMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneBandwidthCachedMetricName.String(),
+			Help: "Cached bandwidth per zone in bytes",
+		}, []string{"zone", "account"},
+		),
 
-	zoneBandwidthCached = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneBandwidthCachedMetricName.String(),
-		Help: "Cached bandwidth per zone in bytes",
-	}, []string{"zone", "account"},
-	)
+		zoneBandwidthSSLEncryptedMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneBandwidthSSLEncryptedMetricName.String(),
+			Help: "Encrypted bandwidth per zone in bytes",
+		}, []string{"zone", "account"},
+		),
 
-	zoneBandwidthSSLEncrypted = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneBandwidthSSLEncryptedMetricName.String(),
-		Help: "Encrypted bandwidth per zone in bytes",
-	}, []string{"zone", "account"},
-	)
+		zoneBandwidthContentTypeMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneBandwidthContentTypeMetricName.String(),
+			Help: "Bandwidth per zone per content type",
+		}, []string{"zone", "account", "content_type"},
+		),
 
-	zoneBandwidthContentType = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneBandwidthContentTypeMetricName.String(),
-		Help: "Bandwidth per zone per content type",
-	}, []string{"zone", "account", "content_type"},
-	)
+		zoneBandwidthCountryMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneBandwidthCountryMetricName.String(),
+			Help: "Bandwidth per country per zone",
+		}, []string{"zone", "account", "country", "region"},
+		),
 
-	zoneBandwidthCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneBandwidthCountryMetricName.String(),
-		Help: "Bandwidth per country per zone",
-	}, []string{"zone", "account", "country", "region"},
-	)
+		zoneThreatsTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneThreatsTotalMetricName.String(),
+			Help: "Threats per zone",
+		}, []string{"zone", "account"},
+		),
 
-	zoneThreatsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneThreatsTotalMetricName.String(),
-		Help: "Threats per zone",
-	}, []string{"zone", "account"},
-	)
+		zoneThreatsCountryMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneThreatsCountryMetricName.String(),
+			Help: "Threats per zone per country",
+		}, []string{"zone", "account", "country", "region"},
+		),
 
-	zoneThreatsCountry = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneThreatsCountryMetricName.String(),
-		Help: "Threats per zone per country",
-	}, []string{"zone", "account", "country", "region"},
-	)
+		zoneThreatsTypeMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneThreatsTypeMetricName.String(),
+			Help: "Threats per zone per type",
+		}, []string{"zone", "account", "type"},
+		),
 
-	zoneThreatsType = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneThreatsTypeMetricName.String(),
-		Help: "Threats per zone per type",
-	}, []string{"zone", "account", "type"},
-	)
+		zonePageviewsTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zonePageviewsTotalMetricName.String(),
+			Help: "Pageviews per zone",
+		}, []string{"zone", "account"},
+		),
 
-	zonePageviewsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zonePageviewsTotalMetricName.String(),
-		Help: "Pageviews per zone",
-	}, []string{"zone", "account"},
-	)
+		zoneUniquesTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneUniquesTotalMetricName.String(),
+			Help: "Uniques per zone",
+		}, []string{"zone", "account"},
+		),
 
-	zoneUniquesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneUniquesTotalMetricName.String(),
-		Help: "Uniques per zone",
-	}, []string{"zone", "account"},
-	)
+		zoneColocationVisitsMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneColocationVisitsMetricName.String(),
+			Help: "Total visits per colocation",
+		}, []string{"zone", "account", "colocation", "host"},
+		),
 
-	zoneColocationVisits = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneColocationVisitsMetricName.String(),
-		Help: "Total visits per colocation",
-	}, []string{"zone", "account", "colocation", "host"},
-	)
+		zoneColocationEdgeResponseBytesMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneColocationEdgeResponseBytesMetricName.String(),
+			Help: "Edge response bytes per colocation",
+		}, []string{"zone", "account", "colocation", "host"},
+		),
 
-	zoneColocationEdgeResponseBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneColocationEdgeResponseBytesMetricName.String(),
-		Help: "Edge response bytes per colocation",
-	}, []string{"zone", "account", "colocation", "host"},
-	)
+		zoneColocationRequestsTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneColocationRequestsTotalMetricName.String(),
+			Help: "Total requests per colocation",
+		}, []string{"zone", "account", "colocation", "host"},
+		),
 
-	zoneColocationRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneColocationRequestsTotalMetricName.String(),
-		Help: "Total requests per colocation",
-	}, []string{"zone", "account", "colocation", "host"},
-	)
+		zoneFirewallEventsCountMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneFirewallEventsCountMetricName.String(),
+			Help: "Count of Firewall events",
+		}, []string{"zone", "account", "action", "source", "rule", "host", "country"},
+		),
 
-	zoneFirewallEventsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneFirewallEventsCountMetricName.String(),
-		Help: "Count of Firewall events",
-	}, []string{"zone", "account", "action", "source", "rule", "host", "country"},
-	)
+		zoneHealthCheckEventsOriginCountMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: zoneHealthCheckEventsOriginCountMetricName.String(),
+			Help: "Number of Heath check events per region per origin",
+		}, []string{"zone", "account", "health_status", "origin_ip", "region", "fqdn"},
+		),
 
-	zoneHealthCheckEventsOriginCount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: zoneHealthCheckEventsOriginCountMetricName.String(),
-		Help: "Number of Heath check events per region per origin",
-	}, []string{"zone", "account", "health_status", "origin_ip", "region", "fqdn"},
-	)
+		workerRequestsMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: workerRequestsMetricName.String(),
+			Help: "Number of requests sent to worker by script name",
+		}, []string{"script_name", "account"},
+		),
 
-	workerRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: workerRequestsMetricName.String(),
-		Help: "Number of requests sent to worker by script name",
-	}, []string{"script_name", "account"},
-	)
+		workerErrorsMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: workerErrorsMetricName.String(),
+			Help: "Number of errors by script name",
+		}, []string{"script_name", "account"},
+		),
 
-	workerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: workerErrorsMetricName.String(),
-		Help: "Number of errors by script name",
-	}, []string{"script_name", "account"},
-	)
+		poolRequestsTotalMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: poolRequestsTotalMetricName.String(),
+			Help: "Requests per pool",
+		},
+			[]string{"zone", "account", "load_balancer_name", "pool_name", "origin_name"},
+		),
+		// TODO: Update this to counter vec and use counts from the query to add
+		logpushFailedJobsAccountMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: logpushFailedJobsAccountMetricName.String(),
+			Help: "Number of failed logpush jobs on the account level",
+		},
+			[]string{"account", "destination", "job_id", "final"},
+		),
 
-	workerCPUTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: workerCPUTimeMetricName.String(),
-		Help: "CPU time quantiles by script name",
-	}, []string{"script_name", "account", "quantile"},
-	)
+		logpushFailedJobsZoneMetricName: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: logpushFailedJobsZoneMetricName.String(),
+			Help: "Number of failed logpush jobs on the zone level",
+		},
+			[]string{"destination", "job_id", "final"},
+		),
+	}
 
-	workerDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: workerDurationMetricName.String(),
-		Help: "Duration quantiles by script name (GB*s)",
-	}, []string{"script_name", "account", "quantile"},
-	)
+	gaugeMetrics = map[MetricName]*prometheus.GaugeVec{
+		workerCPUTimeMetricName: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: workerCPUTimeMetricName.String(),
+			Help: "CPU time quantiles by script name",
+		}, []string{"script_name", "account", "quantile"},
+		),
 
-	poolHealthStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: poolHealthStatusMetricName.String(),
-		Help: "Reports the health of a pool, 1 for healthy, 0 for unhealthy.",
-	},
-		[]string{"zone", "account", "load_balancer_name", "pool_name"},
-	)
+		workerDurationMetricName: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: workerDurationMetricName.String(),
+			Help: "Duration quantiles by script name (GB*s)",
+		}, []string{"script_name", "account", "quantile"},
+		),
 
-	poolRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: poolRequestsTotalMetricName.String(),
-		Help: "Requests per pool",
-	},
-		[]string{"zone", "account", "load_balancer_name", "pool_name", "origin_name"},
-	)
-
-	// TODO: Update this to counter vec and use counts from the query to add
-	logpushFailedJobsAccount = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: logpushFailedJobsAccountMetricName.String(),
-		Help: "Number of failed logpush jobs on the account level",
-	},
-		[]string{"account", "destination", "job_id", "final"},
-	)
-
-	logpushFailedJobsZone = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: logpushFailedJobsZoneMetricName.String(),
-		Help: "Number of failed logpush jobs on the zone level",
-	},
-		[]string{"destination", "job_id", "final"},
-	)
+		poolHealthStatusMetricName: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: poolHealthStatusMetricName.String(),
+			Help: "Reports the health of a pool, 1 for healthy, 0 for unhealthy.",
+		},
+			[]string{"zone", "account", "load_balancer_name", "pool_name"},
+		),
+	}
 )
 
-func buildAllMetricsSet() MetricsSet {
-	allMetricsSet := MetricsSet{}
-	allMetricsSet.Add(zoneRequestTotalMetricName)
-	allMetricsSet.Add(zoneRequestCachedMetricName)
-	allMetricsSet.Add(zoneRequestSSLEncryptedMetricName)
-	allMetricsSet.Add(zoneRequestContentTypeMetricName)
-	allMetricsSet.Add(zoneRequestCountryMetricName)
-	allMetricsSet.Add(zoneRequestHTTPStatusMetricName)
-	allMetricsSet.Add(zoneRequestBrowserMapMetricName)
-	allMetricsSet.Add(zoneRequestOriginStatusCountryHostMetricName)
-	allMetricsSet.Add(zoneRequestStatusCountryHostMetricName)
-	allMetricsSet.Add(zoneBandwidthTotalMetricName)
-	allMetricsSet.Add(zoneBandwidthCachedMetricName)
-	allMetricsSet.Add(zoneBandwidthSSLEncryptedMetricName)
-	allMetricsSet.Add(zoneBandwidthContentTypeMetricName)
-	allMetricsSet.Add(zoneBandwidthCountryMetricName)
-	allMetricsSet.Add(zoneThreatsTotalMetricName)
-	allMetricsSet.Add(zoneThreatsCountryMetricName)
-	allMetricsSet.Add(zoneThreatsTypeMetricName)
-	allMetricsSet.Add(zonePageviewsTotalMetricName)
-	allMetricsSet.Add(zoneUniquesTotalMetricName)
-	allMetricsSet.Add(zoneColocationVisitsMetricName)
-	allMetricsSet.Add(zoneColocationEdgeResponseBytesMetricName)
-	allMetricsSet.Add(zoneColocationRequestsTotalMetricName)
-	allMetricsSet.Add(zoneFirewallEventsCountMetricName)
-	allMetricsSet.Add(zoneHealthCheckEventsOriginCountMetricName)
-	allMetricsSet.Add(workerRequestsMetricName)
-	allMetricsSet.Add(workerErrorsMetricName)
-	allMetricsSet.Add(workerCPUTimeMetricName)
-	allMetricsSet.Add(workerDurationMetricName)
-	allMetricsSet.Add(poolHealthStatusMetricName)
-	allMetricsSet.Add(poolRequestsTotalMetricName)
-	allMetricsSet.Add(logpushFailedJobsAccountMetricName)
-	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
-	return allMetricsSet
-}
-
-func buildDeniedMetricsSet(metricsDenylist []string) (MetricsSet, error) {
-	deniedMetricsSet := MetricsSet{}
-	allMetricsSet := buildAllMetricsSet()
+func disableDeniedMetrics(metricsDenylist []string) {
 	for _, metric := range metricsDenylist {
-		if !allMetricsSet.Has(MetricName(metric)) {
-			return nil, fmt.Errorf("metric %s doesn't exists", metric)
-		}
-		deniedMetricsSet.Add(MetricName(metric))
+		delete(counterMetrics, MetricName(metric))
+		delete(gaugeMetrics, MetricName(metric))
 	}
-	return deniedMetricsSet, nil
 }
 
-func mustRegisterMetrics(deniedMetrics MetricsSet) {
-	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
-		prometheus.MustRegister(zoneRequestTotal)
+func mustRegisterMetrics() {
+	for _, metric := range counterMetrics {
+		prometheus.MustRegister(metric)
 	}
-	if !deniedMetrics.Has(zoneRequestCachedMetricName) {
-		prometheus.MustRegister(zoneRequestCached)
-	}
-	if !deniedMetrics.Has(zoneRequestSSLEncryptedMetricName) {
-		prometheus.MustRegister(zoneRequestSSLEncrypted)
-	}
-	if !deniedMetrics.Has(zoneRequestContentTypeMetricName) {
-		prometheus.MustRegister(zoneRequestContentType)
-	}
-	if !deniedMetrics.Has(zoneRequestCountryMetricName) {
-		prometheus.MustRegister(zoneRequestCountry)
-	}
-	if !deniedMetrics.Has(zoneRequestHTTPStatusMetricName) {
-		prometheus.MustRegister(zoneRequestHTTPStatus)
-	}
-	if !deniedMetrics.Has(zoneRequestBrowserMapMetricName) {
-		prometheus.MustRegister(zoneRequestBrowserMap)
-	}
-	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostMetricName) {
-		prometheus.MustRegister(zoneRequestOriginStatusCountryHost)
-	}
-	if !deniedMetrics.Has(zoneRequestStatusCountryHostMetricName) {
-		prometheus.MustRegister(zoneRequestStatusCountryHost)
-	}
-	if !deniedMetrics.Has(zoneBandwidthTotalMetricName) {
-		prometheus.MustRegister(zoneBandwidthTotal)
-	}
-	if !deniedMetrics.Has(zoneBandwidthCachedMetricName) {
-		prometheus.MustRegister(zoneBandwidthCached)
-	}
-	if !deniedMetrics.Has(zoneBandwidthSSLEncryptedMetricName) {
-		prometheus.MustRegister(zoneBandwidthSSLEncrypted)
-	}
-	if !deniedMetrics.Has(zoneBandwidthContentTypeMetricName) {
-		prometheus.MustRegister(zoneBandwidthContentType)
-	}
-	if !deniedMetrics.Has(zoneBandwidthCountryMetricName) {
-		prometheus.MustRegister(zoneBandwidthCountry)
-	}
-	if !deniedMetrics.Has(zoneThreatsTotalMetricName) {
-		prometheus.MustRegister(zoneThreatsTotal)
-	}
-	if !deniedMetrics.Has(zoneThreatsCountryMetricName) {
-		prometheus.MustRegister(zoneThreatsCountry)
-	}
-	if !deniedMetrics.Has(zoneThreatsTypeMetricName) {
-		prometheus.MustRegister(zoneThreatsType)
-	}
-	if !deniedMetrics.Has(zonePageviewsTotalMetricName) {
-		prometheus.MustRegister(zonePageviewsTotal)
-	}
-	if !deniedMetrics.Has(zoneUniquesTotalMetricName) {
-		prometheus.MustRegister(zoneUniquesTotal)
-	}
-	if !deniedMetrics.Has(zoneColocationVisitsMetricName) {
-		prometheus.MustRegister(zoneColocationVisits)
-	}
-	if !deniedMetrics.Has(zoneColocationEdgeResponseBytesMetricName) {
-		prometheus.MustRegister(zoneColocationEdgeResponseBytes)
-	}
-	if !deniedMetrics.Has(zoneColocationRequestsTotalMetricName) {
-		prometheus.MustRegister(zoneColocationRequestsTotal)
-	}
-	if !deniedMetrics.Has(zoneFirewallEventsCountMetricName) {
-		prometheus.MustRegister(zoneFirewallEventsCount)
-	}
-	if !deniedMetrics.Has(zoneHealthCheckEventsOriginCountMetricName) {
-		prometheus.MustRegister(zoneHealthCheckEventsOriginCount)
-	}
-	if !deniedMetrics.Has(workerRequestsMetricName) {
-		prometheus.MustRegister(workerRequests)
-	}
-	if !deniedMetrics.Has(workerErrorsMetricName) {
-		prometheus.MustRegister(workerErrors)
-	}
-	if !deniedMetrics.Has(workerCPUTimeMetricName) {
-		prometheus.MustRegister(workerCPUTime)
-	}
-	if !deniedMetrics.Has(workerDurationMetricName) {
-		prometheus.MustRegister(workerDuration)
-	}
-	if !deniedMetrics.Has(poolHealthStatusMetricName) {
-		prometheus.MustRegister(poolHealthStatus)
-	}
-	if !deniedMetrics.Has(poolRequestsTotalMetricName) {
-		prometheus.MustRegister(poolRequestsTotal)
-	}
-	if !deniedMetrics.Has(logpushFailedJobsAccountMetricName) {
-		prometheus.MustRegister(logpushFailedJobsAccount)
-	}
-	if !deniedMetrics.Has(logpushFailedJobsZoneMetricName) {
-		prometheus.MustRegister(logpushFailedJobsZone)
+
+	for _, metric := range gaugeMetrics {
+		prometheus.MustRegister(metric)
 	}
 }
 
@@ -426,16 +296,24 @@ func fetchWorkerAnalytics(account cloudflare.Account, wg *sync.WaitGroup) {
 
 	for _, a := range r.Viewer.Accounts {
 		for _, w := range a.WorkersInvocationsAdaptive {
-			workerRequests.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName}).Add(float64(w.Sum.Requests))
-			workerErrors.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName}).Add(float64(w.Sum.Errors))
-			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P50"}).Set(float64(w.Quantiles.CPUTimeP50))
-			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P75"}).Set(float64(w.Quantiles.CPUTimeP75))
-			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P99"}).Set(float64(w.Quantiles.CPUTimeP99))
-			workerCPUTime.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P999"}).Set(float64(w.Quantiles.CPUTimeP999))
-			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P50"}).Set(float64(w.Quantiles.DurationP50))
-			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P75"}).Set(float64(w.Quantiles.DurationP75))
-			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P99"}).Set(float64(w.Quantiles.DurationP99))
-			workerDuration.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P999"}).Set(float64(w.Quantiles.DurationP999))
+			if m, ok := counterMetrics[workerRequestsMetricName]; ok {
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName}).Add(float64(w.Sum.Requests))
+			}
+			if m, ok := counterMetrics[workerErrorsMetricName]; ok {
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName}).Add(float64(w.Sum.Errors))
+			}
+			if m, ok := gaugeMetrics[workerCPUTimeMetricName]; ok {
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P50"}).Set(float64(w.Quantiles.CPUTimeP50))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P75"}).Set(float64(w.Quantiles.CPUTimeP75))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P99"}).Set(float64(w.Quantiles.CPUTimeP99))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P999"}).Set(float64(w.Quantiles.CPUTimeP999))
+			}
+			if m, ok := gaugeMetrics[workerDurationMetricName]; ok {
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P50"}).Set(float64(w.Quantiles.DurationP50))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P75"}).Set(float64(w.Quantiles.DurationP75))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P99"}).Set(float64(w.Quantiles.DurationP99))
+				m.With(prometheus.Labels{"script_name": w.Dimensions.ScriptName, "account": accountName, "quantile": "P999"}).Set(float64(w.Quantiles.DurationP999))
+			}
 		}
 	}
 }
@@ -456,10 +334,12 @@ func fetchLogpushAnalyticsForAccount(account cloudflare.Account, wg *sync.WaitGr
 
 	for _, acc := range r.Viewer.Accounts {
 		for _, LogpushHealthAdaptiveGroup := range acc.LogpushHealthAdaptiveGroups {
-			logpushFailedJobsAccount.With(prometheus.Labels{"account": account.ID,
-				"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
-				"job_id":      strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
-				"final":       strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			if m, ok := counterMetrics[logpushFailedJobsAccountMetricName]; ok {
+				m.With(prometheus.Labels{"account": account.ID,
+					"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
+					"job_id":      strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
+					"final":       strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			}
 		}
 	}
 }
@@ -485,9 +365,11 @@ func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 	for _, zone := range r.Viewer.Zones {
 		for _, LogpushHealthAdaptiveGroup := range zone.LogpushHealthAdaptiveGroups {
-			logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
-				"job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
-				"final":  strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			if m, ok := counterMetrics[logpushFailedJobsZoneMetricName]; ok {
+				m.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
+					"job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
+					"final":  strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			}
 		}
 	}
 }
@@ -514,9 +396,15 @@ func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		cg := z.ColoGroups
 		name, account := findZoneAccountName(zones, z.ZoneTag)
 		for _, c := range cg {
-			zoneColocationVisits.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
-			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
-			zoneColocationRequestsTotal.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Count))
+			if m, ok := counterMetrics[zoneColocationVisitsMetricName]; ok {
+				m.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
+			}
+			if m, ok := counterMetrics[zoneColocationEdgeResponseBytesMetricName]; ok {
+				m.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
+			}
+			if m, ok := counterMetrics[zoneColocationRequestsTotalMetricName]; ok {
+				m.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Count))
+			}
 		}
 	}
 }
@@ -559,46 +447,79 @@ func addHTTPGroups(z *zoneResp, name string, account string) {
 
 	zt := z.HTTP1mGroups[0]
 
-	zoneRequestTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Requests))
-	zoneRequestCached.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.CachedRequests))
-	zoneRequestSSLEncrypted.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.EncryptedRequests))
+	if m, ok := counterMetrics[zoneRequestTotalMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Requests))
+	}
+	if m, ok := counterMetrics[zoneRequestCachedMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.CachedRequests))
+	}
+	if m, ok := counterMetrics[zoneRequestSSLEncryptedMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.EncryptedRequests))
+	}
 
 	for _, ct := range zt.Sum.ContentType {
-		zoneRequestContentType.With(prometheus.Labels{"zone": name, "account": account, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
-		zoneBandwidthContentType.With(prometheus.Labels{"zone": name, "account": account, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
+		if m, ok := counterMetrics[zoneRequestContentTypeMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Requests))
+		}
+		if m, ok := counterMetrics[zoneBandwidthContentTypeMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "content_type": ct.EdgeResponseContentType}).Add(float64(ct.Bytes))
+		}
 	}
 
 	for _, country := range zt.Sum.Country {
 		c := countries.ByName(country.ClientCountryName)
 		region := c.Info().Region.Info().Name
 
-		zoneRequestCountry.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
-		zoneBandwidthCountry.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
-		zoneThreatsCountry.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
+		if m, ok := counterMetrics[zoneRequestCountryMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Requests))
+		}
+		if m, ok := counterMetrics[zoneBandwidthCountryMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Bytes))
+		}
+		if m, ok := counterMetrics[zoneThreatsCountryMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "country": country.ClientCountryName, "region": region}).Add(float64(country.Threats))
+		}
 	}
 
 	for _, status := range zt.Sum.ResponseStatus {
-		zoneRequestHTTPStatus.With(prometheus.Labels{"zone": name, "account": account, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
+		if m, ok := counterMetrics[zoneRequestHTTPStatusMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "status": strconv.Itoa(status.EdgeResponseStatus)}).Add(float64(status.Requests))
+		}
 	}
 
 	for _, browser := range zt.Sum.BrowserMap {
-		zoneRequestBrowserMap.With(prometheus.Labels{"zone": name, "account": account, "family": browser.UaBrowserFamily}).Add(float64(browser.PageViews))
+		if m, ok := counterMetrics[zoneRequestBrowserMapMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "family": browser.UaBrowserFamily}).Add(float64(browser.PageViews))
+		}
 	}
 
-	zoneBandwidthTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Bytes))
-	zoneBandwidthCached.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.CachedBytes))
-	zoneBandwidthSSLEncrypted.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.EncryptedBytes))
-
-	zoneThreatsTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Threats))
+	if m, ok := counterMetrics[zoneBandwidthTotalMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Bytes))
+	}
+	if m, ok := counterMetrics[zoneBandwidthCachedMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.CachedBytes))
+	}
+	if m, ok := counterMetrics[zoneBandwidthSSLEncryptedMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.EncryptedBytes))
+	}
+	if m, ok := counterMetrics[zoneThreatsTotalMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.Threats))
+	}
 
 	for _, t := range zt.Sum.ThreatPathing {
-		zoneThreatsType.With(prometheus.Labels{"zone": name, "account": account, "type": t.Name}).Add(float64(t.Requests))
+		if m, ok := counterMetrics[zoneThreatsTypeMetricName]; ok {
+			m.With(prometheus.Labels{"zone": name, "account": account, "type": t.Name}).Add(float64(t.Requests))
+		}
 	}
 
-	zonePageviewsTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.PageViews))
+	if m, ok := counterMetrics[zonePageviewsTotalMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Sum.PageViews))
+	}
 
 	// Uniques
-	zoneUniquesTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Unique.Uniques))
+	if m, ok := counterMetrics[zoneUniquesTotalMetricName]; ok {
+		m.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Unique.Uniques))
+	}
 }
 
 func addFirewallGroups(z *zoneResp, name string, account string) {
@@ -608,16 +529,18 @@ func addFirewallGroups(z *zoneResp, name string, account string) {
 	}
 	rulesMap := fetchFirewallRules(z.ZoneTag)
 	for _, g := range z.FirewallEventsAdaptiveGroups {
-		zoneFirewallEventsCount.With(
-			prometheus.Labels{
-				"zone":    name,
-				"account": account,
-				"action":  g.Dimensions.Action,
-				"source":  g.Dimensions.Source,
-				"rule":    normalizeRuleName(rulesMap[g.Dimensions.RuleID]),
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-				"country": g.Dimensions.ClientCountryName,
-			}).Add(float64(g.Count))
+		if m, ok := counterMetrics[zoneFirewallEventsCountMetricName]; ok {
+			m.With(
+				prometheus.Labels{
+					"zone":    name,
+					"account": account,
+					"action":  g.Dimensions.Action,
+					"source":  g.Dimensions.Source,
+					"rule":    normalizeRuleName(rulesMap[g.Dimensions.RuleID]),
+					"host":    g.Dimensions.ClientRequestHTTPHost,
+					"country": g.Dimensions.ClientCountryName,
+				}).Add(float64(g.Count))
+		}
 	}
 }
 
@@ -636,39 +559,45 @@ func addHealthCheckGroups(z *zoneResp, name string, account string) {
 	}
 
 	for _, g := range z.HealthCheckEventsAdaptiveGroups {
-		zoneHealthCheckEventsOriginCount.With(
-			prometheus.Labels{
-				"zone":          name,
-				"account":       account,
-				"health_status": g.Dimensions.HealthStatus,
-				"origin_ip":     g.Dimensions.OriginIP,
-				"region":        g.Dimensions.Region,
-				"fqdn":          g.Dimensions.Fqdn,
-			}).Add(float64(g.Count))
+		if m, ok := counterMetrics[zoneHealthCheckEventsOriginCountMetricName]; ok {
+			m.With(
+				prometheus.Labels{
+					"zone":          name,
+					"account":       account,
+					"health_status": g.Dimensions.HealthStatus,
+					"origin_ip":     g.Dimensions.OriginIP,
+					"region":        g.Dimensions.Region,
+					"fqdn":          g.Dimensions.Fqdn,
+				}).Add(float64(g.Count))
+		}
 	}
 }
 
 func addHTTPAdaptiveGroups(z *zoneResp, name string, account string) {
 	for _, g := range z.HTTPRequestsAdaptiveGroups {
-		zoneRequestOriginStatusCountryHost.With(
-			prometheus.Labels{
-				"zone":    name,
-				"account": account,
-				"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-			}).Add(float64(g.Count))
+		if m, ok := counterMetrics[zoneRequestOriginStatusCountryHostMetricName]; ok {
+			m.With(
+				prometheus.Labels{
+					"zone":    name,
+					"account": account,
+					"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
+					"country": g.Dimensions.ClientCountryName,
+					"host":    g.Dimensions.ClientRequestHTTPHost,
+				}).Add(float64(g.Count))
+		}
 	}
 
 	for _, g := range z.HTTPRequestsEdgeCountryHost {
-		zoneRequestStatusCountryHost.With(
-			prometheus.Labels{
-				"zone":    name,
-				"account": account,
-				"status":  strconv.Itoa(int(g.Dimensions.EdgeResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-			}).Add(float64(g.Count))
+		if m, ok := counterMetrics[zoneRequestStatusCountryHostMetricName]; ok {
+			m.With(
+				prometheus.Labels{
+					"zone":    name,
+					"account": account,
+					"status":  strconv.Itoa(int(g.Dimensions.EdgeResponseStatus)),
+					"country": g.Dimensions.ClientCountryName,
+					"host":    g.Dimensions.ClientRequestHTTPHost,
+				}).Add(float64(g.Count))
+		}
 	}
 }
 
@@ -700,27 +629,31 @@ func fetchLoadBalancerAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 
 func addLoadBalancingRequestsAdaptiveGroups(z *lbResp, name string, account string) {
 	for _, g := range z.LoadBalancingRequestsAdaptiveGroups {
-		poolRequestsTotal.With(
-			prometheus.Labels{
-				"zone":               name,
-				"account":            account,
-				"load_balancer_name": g.Dimensions.LbName,
-				"pool_name":          g.Dimensions.SelectedPoolName,
-				"origin_name":        g.Dimensions.SelectedOriginName,
-			}).Add(float64(g.Count))
+		if m, ok := counterMetrics[poolRequestsTotalMetricName]; ok {
+			m.With(
+				prometheus.Labels{
+					"zone":               name,
+					"account":            account,
+					"load_balancer_name": g.Dimensions.LbName,
+					"pool_name":          g.Dimensions.SelectedPoolName,
+					"origin_name":        g.Dimensions.SelectedOriginName,
+				}).Add(float64(g.Count))
+		}
 	}
 }
 
 func addLoadBalancingRequestsAdaptive(z *lbResp, name string, account string) {
 	for _, g := range z.LoadBalancingRequestsAdaptive {
 		for _, p := range g.Pools {
-			poolHealthStatus.With(
-				prometheus.Labels{
-					"zone":               name,
-					"account":            account,
-					"load_balancer_name": g.LbName,
-					"pool_name":          p.PoolName,
-				}).Set(float64(p.Healthy))
+			if m, ok := gaugeMetrics[poolHealthStatusMetricName]; ok {
+				m.With(
+					prometheus.Labels{
+						"zone":               name,
+						"account":            account,
+						"load_balancer_name": g.LbName,
+						"pool_name":          p.PoolName,
+					}).Set(float64(p.Healthy))
+			}
 		}
 	}
 }
