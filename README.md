@@ -41,20 +41,23 @@ To authenticate this way, set both `CF_API_KEY` and `CF_API_EMAIL`.
 ## Configuration
 The exporter can be configured using env variables or command flags.
 
-| **KEY** | **description** |
-|-|-|
-| `CF_API_EMAIL` |  user email (see https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys) |
-| `CF_API_KEY` |  API key associated with email (`CF_API_EMAIL` is required if this is set)|
-| `CF_API_TOKEN` |  API authentication token (recommended before API key + email. Version 0.0.5+. see https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
-| `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids. If not set, all zones from account are exported |
-| `CF_EXCLUDE_ZONES` |  (Optional) cloudflare zones to exclude, comma delimited list of zone ids. If not set, no zones from account are excluded |
-| `FREE_TIER` | (Optional) scrape only metrics included in free plan. Accepts `true` or `false`, default `false`. |
-| `LISTEN` |  listen on addr:port (default `:8080`), omit addr to listen on all interfaces |
-| `METRICS_PATH` |  path for metrics, default `/metrics` |
-| `SCRAPE_DELAY` | scrape delay in seconds, default `300` |
-| `CF_BATCH_SIZE` | cloudflare request zones batch size (1 - 10), default `10` |
-| `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported |
-| `ZONE_<NAME>` |  `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
+| **KEY**              | **description**                                                                                                                                                                          |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CF_API_EMAIL`       | user email (see https://support.cloudflare.com/hc/en-us/articles/200167836-Managing-API-Tokens-and-Keys)                                                                                 |
+| `CF_API_KEY`         | API key associated with email (`CF_API_EMAIL` is required if this is set)                                                                                                                |
+| `CF_API_TOKEN`       | API authentication token (recommended before API key + email. Version 0.0.5+. see https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth) |
+| `CF_ZONES`           | (Optional) cloudflare zones to export, comma delimited list of zone ids. If not set, all zones from account are exported                                                                 |
+| `CF_EXCLUDE_ZONES`   | (Optional) cloudflare zones to exclude, comma delimited list of zone ids. If not set, no zones from account are excluded                                                                 |
+| `CF_MAX_RETRIES`     | (Optional) max retries for cloudflare api, default `3`                                                                                                                                   |
+| `CF_MIN_RETRY_DELAY` | (Optional) min retry delay for cloudflare api, default `1s`                                                                                                                              |
+| `CF_MAX_RETRY_DELAY` | (Optional) max retry delay for cloudflare api, default `10s`                                                                                                                             |
+| `FREE_TIER`          | (Optional) scrape only metrics included in free plan. Accepts `true` or `false`, default `false`.                                                                                        |
+| `LISTEN`             | listen on addr:port (default `:8080`), omit addr to listen on all interfaces                                                                                                             |
+| `METRICS_PATH`       | path for metrics, default `/metrics`                                                                                                                                                     |
+| `SCRAPE_DELAY`       | scrape delay in seconds, default `300`                                                                                                                                                   |
+| `CF_BATCH_SIZE`      | cloudflare request zones batch size (1 - 10), default `10`                                                                                                                               |
+| `METRICS_DENYLIST`   | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported                                          |
+| `ZONE_<NAME>`        | `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards.                         |
 
 Corresponding flags:
 ```
@@ -63,6 +66,9 @@ Corresponding flags:
   -cf_api_token="": cloudflare api token (version 0.0.5+, preferred)
   -cf_zones="": cloudflare zones to export, comma delimited list
   -cf_exclude_zones="": cloudflare zones to exclude, comma delimited list
+  -cf_max_retries="3": max retries for cloudflare api, defaults to 3
+  -cf_min_retry_delay="1s": min retry delay for cloudflare api, defaults to 1s
+  -cf_max_retry_delay="10s": max retry delay for cloudflare api, defaults to 10s
   -free_tier=false: scrape only metrics included in free plan, default false
   -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
   -metrics_path="/metrics": path for metrics, default /metrics

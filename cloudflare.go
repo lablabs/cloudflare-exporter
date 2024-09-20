@@ -254,9 +254,9 @@ func fetchZones() []cloudflare.Zone {
 	var api *cloudflare.API
 	var err error
 	if len(viper.GetString("cf_api_token")) > 0 {
-		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"), newRetryPolicy())
 	} else {
-		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"), newRetryPolicy())
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -275,9 +275,9 @@ func fetchFirewallRules(zoneID string) map[string]string {
 	var api *cloudflare.API
 	var err error
 	if len(viper.GetString("cf_api_token")) > 0 {
-		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"), newRetryPolicy())
 	} else {
-		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"), newRetryPolicy())
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -319,9 +319,9 @@ func fetchAccounts() []cloudflare.Account {
 	var api *cloudflare.API
 	var err error
 	if len(viper.GetString("cf_api_token")) > 0 {
-		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"))
+		api, err = cloudflare.NewWithAPIToken(viper.GetString("cf_api_token"), newRetryPolicy())
 	} else {
-		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"))
+		api, err = cloudflare.New(viper.GetString("cf_api_key"), viper.GetString("cf_api_email"), newRetryPolicy())
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -785,4 +785,12 @@ func filterNonFreePlanZones(zones []cloudflare.Zone) (filteredZones []cloudflare
 		}
 	}
 	return
+}
+
+func newRetryPolicy() cloudflare.Option {
+	return cloudflare.UsingRetryPolicy(
+		viper.GetInt("cf_max_retries"),
+		int(viper.GetDuration("cf_min_retry_delay").Seconds()),
+		int(viper.GetDuration("cf_max_retry_delay").Seconds()),
+	)
 }

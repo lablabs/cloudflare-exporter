@@ -247,6 +247,18 @@ func main() {
 	viper.BindEnv("metrics_denylist")
 	viper.SetDefault("metrics_denylist", "")
 
+	flags.Int("cf_max_retries", 3, "max retries for cloudflare api, defaults to 3")
+	viper.BindEnv("cf_max_retries")
+	viper.SetDefault("cf_max_retries", 3)
+
+	flags.Duration("cf_min_retry_delay", 1*time.Second, "min retry delay for cloudflare api, defaults to 1s")
+	viper.BindEnv("cf_min_retry_delay")
+	viper.SetDefault("cf_min_retry_delay", 1*time.Second)
+
+	flags.Duration("cf_max_retry_delay", 10*time.Second, "max retry delay for cloudflare api, defaults to 10s")
+	viper.BindEnv("cf_max_retry_delay")
+	viper.SetDefault("cf_max_retry_delay", 10*time.Second)
+
 	viper.BindPFlags(flags)
 	cmd.Execute()
 }
