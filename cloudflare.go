@@ -27,12 +27,6 @@ type cloudflareResponseAccts struct {
 	} `json:"viewer"`
 }
 
-type cloudflareResponseColo struct {
-	Viewer struct {
-		Zones []zoneRespColo `json:"zones"`
-	} `json:"viewer"`
-}
-
 type cloudflareResponseLb struct {
 	Viewer struct {
 		Zones []lbResp `json:"zones"`
@@ -89,26 +83,6 @@ type accountResp struct {
 			DurationP999 float32 `json:"durationP999"`
 		} `json:"quantiles"`
 	} `json:"workersInvocationsAdaptive"`
-}
-
-type zoneRespColo struct {
-	ColoGroups []struct {
-		Dimensions struct {
-			Datetime string `json:"datetime"`
-			ColoCode string `json:"coloCode"`
-			Host     string `json:"clientRequestHTTPHost"`
-		} `json:"dimensions"`
-		Count uint64 `json:"count"`
-		Sum   struct {
-			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
-			Visits            uint64 `json:"visits"`
-		} `json:"sum"`
-		Avg struct {
-			SampleInterval float64 `json:"sampleInterval"`
-		} `json:"avg"`
-	} `json:"httpRequestsAdaptiveGroups"`
-
-	ZoneTag string `json:"zoneTag"`
 }
 
 type zoneResp struct {
@@ -454,61 +428,6 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
 
 	var resp cloudflareResponse
-	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
-func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
-	now := time.Now().Add(-time.Duration(viper.GetInt("scrape_delay")) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
-
-	request := graphql.NewRequest(`
-	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
-		viewer {
-			zones(filter: { zoneTag_in: $zoneIDs }) {
-				zoneTag
-				httpRequestsAdaptiveGroups(
-					limit: $limit
-					filter: { datetime_geq: $mintime, datetime_lt: $maxtime }
-					) {
-						count
-						avg {
-							sampleInterval
-						}
-						dimensions {
-							clientRequestHTTPHost
-							coloCode
-							datetime
-						}
-						sum {
-							edgeResponseBytes
-							visits
-						}
-					}
-				}
-			}
-		}
-`)
-	if len(viper.GetString("cf_api_token")) > 0 {
-		request.Header.Set("Authorization", "Bearer "+viper.GetString("cf_api_token"))
-	} else {
-		request.Header.Set("X-AUTH-EMAIL", viper.GetString("cf_api_email"))
-		request.Header.Set("X-AUTH-KEY", viper.GetString("cf_api_key"))
-	}
-	request.Var("limit", 9999)
-	request.Var("maxtime", now)
-	request.Var("mintime", now1mAgo)
-	request.Var("zoneIDs", zoneIDs)
-
-	ctx := context.Background()
-	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
-	var resp cloudflareResponseColo
 	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
 		log.Error(err)
 		return nil, err

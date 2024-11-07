@@ -492,35 +492,6 @@ func fetchLogpushAnalyticsForZone(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchZoneColocationAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
-	wg.Add(1)
-	defer wg.Done()
-
-	// Colocation metrics are not available in non-enterprise zones
-	if viper.GetBool("free_tier") {
-		return
-	}
-
-	zoneIDs := extractZoneIDs(filterNonFreePlanZones(zones))
-	if len(zoneIDs) == 0 {
-		return
-	}
-
-	r, err := fetchColoTotals(zoneIDs)
-	if err != nil {
-		return
-	}
-	for _, z := range r.Viewer.Zones {
-		cg := z.ColoGroups
-		name, account := findZoneAccountName(zones, z.ZoneTag)
-		for _, c := range cg {
-			zoneColocationVisits.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
-			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
-			zoneColocationRequestsTotal.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Count))
-		}
-	}
-}
-
 func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
@@ -547,7 +518,6 @@ func fetchZoneAnalytics(zones []cloudflare.Zone, wg *sync.WaitGroup) {
 		addHTTPGroups(&z, name, account)
 		addFirewallGroups(&z, name, account)
 		addHealthCheckGroups(&z, name, account)
-		addHTTPAdaptiveGroups(&z, name, account)
 	}
 }
 
@@ -644,30 +614,6 @@ func addHealthCheckGroups(z *zoneResp, name string, account string) {
 				"origin_ip":     g.Dimensions.OriginIP,
 				"region":        g.Dimensions.Region,
 				"fqdn":          g.Dimensions.Fqdn,
-			}).Add(float64(g.Count))
-	}
-}
-
-func addHTTPAdaptiveGroups(z *zoneResp, name string, account string) {
-	for _, g := range z.HTTPRequestsAdaptiveGroups {
-		zoneRequestOriginStatusCountryHost.With(
-			prometheus.Labels{
-				"zone":    name,
-				"account": account,
-				"status":  strconv.Itoa(int(g.Dimensions.OriginResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
-			}).Add(float64(g.Count))
-	}
-
-	for _, g := range z.HTTPRequestsEdgeCountryHost {
-		zoneRequestStatusCountryHost.With(
-			prometheus.Labels{
-				"zone":    name,
-				"account": account,
-				"status":  strconv.Itoa(int(g.Dimensions.EdgeResponseStatus)),
-				"country": g.Dimensions.ClientCountryName,
-				"host":    g.Dimensions.ClientRequestHTTPHost,
 			}).Add(float64(g.Count))
 	}
 }

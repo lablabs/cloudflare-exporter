@@ -125,7 +125,6 @@ func fetchMetrics() {
 		filteredZones = filteredZones[len(targetZones):]
 
 		go fetchZoneAnalytics(targetZones, &wg)
-		go fetchZoneColocationAnalytics(targetZones, &wg)
 		go fetchLoadBalancerAnalytics(targetZones, &wg)
 		go fetchLogpushAnalyticsForZone(targetZones, &wg)
 	}
