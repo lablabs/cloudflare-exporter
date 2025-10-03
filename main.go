@@ -167,7 +167,7 @@ func runExpoter() {
 	mustRegisterMetrics(deniedMetricsSet)
 
 	go func() {
-		for ; true; <-time.NewTicker(60 * time.Second).C {
+		for ; true; <-time.NewTicker(time.Duration(viper.GetInt("scrape_interval")) * time.Second).C {
 			go fetchMetrics()
 		}
 	}()
@@ -234,6 +234,10 @@ func main() {
 	flags.Int("scrape_delay", 300, "scrape delay in seconds, defaults to 300")
 	viper.BindEnv("scrape_delay")
 	viper.SetDefault("scrape_delay", 300)
+
+	flags.Int("scrape_interval", 60, "scrape interval in seconds, defaults to 60")
+	viper.BindEnv("scrape_interval")
+	viper.SetDefault("scrape_interval", 60)
 
 	flags.Int("cf_batch_size", 10, "cloudflare zones batch size (1-10), defaults to 10")
 	viper.BindEnv("cf_batch_size")
