@@ -319,9 +319,9 @@ func fetchFirewallRules(zoneID string) map[string]string {
 		}
 
 		if rulesetDesc.Phase == "http_request_firewall_custom" {
-			ruleset, err := api.GetRuleset(ctx, cloudflare.ZoneIdentifier(zoneID), rulesetDesc.ID)
+			ruleset, err := cloudflareAPI.GetRuleset(ctx, cloudflare.ZoneIdentifier(zoneID), rulesetDesc.ID)
 			if err != nil {
-        log.Fatal("Error fetching custom firewall rulesets: %s" err)
+				log.Fatal("Error fetching custom firewall rulesets: %s", err)
 			}
 			for _, rule := range ruleset.Rules {
 				firewallRulesMap[rule.ID] = rule.Description
