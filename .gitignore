@@ -29,3 +29,4 @@ vendor/
 .idea/
 .env
 venom*
+prometheus-data/

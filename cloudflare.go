@@ -85,6 +85,23 @@ type cloudflareResponseLogpushZone struct {
 	} `json:"viewer"`
 }
 
+type cloudflareResponsePathMetrics struct {
+	Viewer struct {
+		Zones []zoneRespPathMetrics `json:"zones"`
+	} `json:"viewer"`
+}
+
+type zoneRespPathMetrics struct {
+	HTTPRequestsPathStatusGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			ClientRequestPath  string `json:"clientRequestPath"`
+			EdgeResponseStatus uint16 `json:"edgeResponseStatus"`
+		} `json:"dimensions"`
+	} `json:"httpRequestsAdaptiveGroups"`
+	ZoneTag string `json:"zoneTag"`
+}
+
 type logpushResponse struct {
 	LogpushHealthAdaptiveGroups []struct {
 		Count uint64 `json:"count"`
@@ -845,6 +862,53 @@ func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) 
 	var resp cloudflareResponseLogpushZone
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
 		log.Errorf("error fetching logpush zone totals, err:%v", err)
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func fetchPathMetrics(zoneIDs []string, limit int) (*cloudflareResponsePathMetrics, error) {
+	request := graphql.NewRequest(`
+	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+		viewer {
+			zones(filter: { zoneTag_in: $zoneIDs }) {
+				zoneTag
+				httpRequestsAdaptiveGroups(
+					limit: $limit
+					filter: {
+						datetime_geq: $mintime,
+						datetime_lt: $maxtime,
+						requestSource: "eyeball"
+					}
+					orderBy: [count_DESC]
+				) {
+					count
+					dimensions {
+						clientRequestPath
+						edgeResponseStatus
+					}
+				}
+			}
+		}
+	}
+	`)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", limit)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	var resp cloudflareResponsePathMetrics
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching path metrics, err:%v", err)
 		return nil, err
 	}
 

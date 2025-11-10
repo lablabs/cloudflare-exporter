@@ -23,3 +23,40 @@ testcases:
           - result.body ShouldContainSubstring go_gc_duration_seconds_count
           - result.statuscode ShouldEqual 200
           - result.body ShouldNotBeEmpty
+
+  - name: Check path metrics are present when enabled
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseUrl}}:{{.basePort}}/metrics"
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldContainSubstring cloudflare_zone_requests_status_path
+          - result.body ShouldContainSubstring zone=
+          - result.body ShouldContainSubstring account=
+          - result.body ShouldContainSubstring status=
+          - result.body ShouldContainSubstring path=
+
+  - name: Verify path metrics have correct label structure
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseUrl}}:{{.basePort}}/metrics"
+        assertions:
+          - result.statuscode ShouldEqual 200
+          # Verify the metric has all four required labels
+          - result.body ShouldContainSubstring cloudflare_zone_requests_status_path{account=
+          # Verify metric appears with realistic HTTP status codes
+          - result.body ShouldMatchRegex cloudflare_zone_requests_status_path\{.*status="(200|301|302|304|400|403|404|500|502|503|504)".*\}
+
+  - name: Verify path normalization (no query strings in paths)
+    steps:
+      - type: http
+        method: GET
+        url: "{{.baseUrl}}:{{.basePort}}/metrics"
+        assertions:
+          - result.statuscode ShouldEqual 200
+          # Ensure paths don't contain query string characters
+          - result.body ShouldNotMatchRegex cloudflare_zone_requests_status_path\{.*path="[^"]*\?.*".*\}
+          # Ensure paths don't contain fragment characters
+          - result.body ShouldNotMatchRegex cloudflare_zone_requests_status_path\{.*path="[^"]*#.*".*\}

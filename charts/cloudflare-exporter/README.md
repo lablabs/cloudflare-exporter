@@ -21,8 +21,10 @@ The following table lists the configurable parameters of the Cloudflare-exporter
 | `image.repository` |  | `"ghcr.io/lablabs/cloudflare_exporter"` |
 | `image.pullPolicy` |  | `"Always"` |
 | `image.tag` |  | `"0.0.2"` |
-| `env` |  | `[]` |
+| `env` | Environment variables for the exporter | `[]` |
 | `secretRef` | The name of a secret with environment variables | `""` |
+| `pathMetrics.enabled` | Enable path-level metrics grouped by zone, path, and HTTP status code | `false` |
+| `pathMetrics.limit` | Maximum number of paths to track per zone (1-1000) | `100` |
 | `imagePullSecrets` |  | `[]` |
 | `nameOverride` |  | `""` |
 | `fullnameOverride` |  | `""` |
@@ -49,7 +51,33 @@ The following table lists the configurable parameters of the Cloudflare-exporter
 | `tolerations` |  | `[]` |
 | `affinity` |  | `{}` |
 
+## Usage Examples
 
+### Enable Path Metrics
+
+To enable path-level metrics for tracking HTTP requests by zone, path, and status code:
+
+```yaml
+pathMetrics:
+  enabled: true
+  limit: 100
+```
+
+Note: Path metrics can generate significant cardinality depending on your traffic patterns. The `limit` parameter controls the maximum number of unique paths tracked per zone (top N by request count). This feature is not recommended for free-tier Cloudflare accounts.
+
+### Configure with Custom Environment Variables
+
+```yaml
+env:
+  - name: CF_API_TOKEN
+    value: "your-api-token"
+  - name: FREE_TIER
+    value: "false"
+
+pathMetrics:
+  enabled: true
+  limit: 50
+```
 
 ## Contributing and reporting issues
 

@@ -130,6 +130,7 @@ func fetchMetrics() {
 		go fetchZoneColocationAnalytics(filteredZones, &wg)
 		go fetchLoadBalancerAnalytics(filteredZones, &wg)
 		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
+		go fetchZonePathAnalytics(filteredZones, &wg)
 	} else if zoneCount > cfgraphqlreqlimit {
 		for s := 0; s < zoneCount; s += cfgraphqlreqlimit {
 			e := s + cfgraphqlreqlimit
@@ -140,6 +141,7 @@ func fetchMetrics() {
 			go fetchZoneColocationAnalytics(filteredZones[s:e], &wg)
 			go fetchLoadBalancerAnalytics(filteredZones[s:e], &wg)
 			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
+			go fetchZonePathAnalytics(filteredZones[s:e], &wg)
 		}
 	}
 
@@ -264,6 +266,18 @@ func main() {
 	viper.BindEnv("enable_pprof")
 	viper.SetDefault("enable_pprof", false)
 
+	flags.Bool("enable_path_metrics", false, "enable path-level metrics grouped by zone, path, and status")
+	viper.BindEnv("enable_path_metrics")
+	viper.SetDefault("enable_path_metrics", false)
+
+	flags.Int("path_metrics_limit", 100, "maximum number of paths to track per zone (1-1000)")
+	viper.BindEnv("path_metrics_limit")
+	viper.SetDefault("path_metrics_limit", 100)
+
+	flags.String("path_metrics_status_filter", "", "HTTP status codes to collect for path metrics (e.g., '404,500' or '300-499' or '404,500-599'). Empty means all statuses.")
+	viper.BindEnv("path_metrics_status_filter")
+	viper.SetDefault("path_metrics_status_filter", "")
+
 	viper.BindPFlags(flags)
 
 	logLevel := viper.GetString("log_level")
@@ -290,6 +304,11 @@ func main() {
 	})
 
 	cftimeout = viper.GetDuration("cf_timeout")
+
+	// Validate path metrics limit
+	if viper.GetInt("path_metrics_limit") < 1 || viper.GetInt("path_metrics_limit") > 1000 {
+		log.Fatal("path_metrics_limit must be between 1 and 1000")
+	}
 
 	if len(viper.GetString("cf_api_token")) > 0 {
 		cfclient = cf.NewClient(

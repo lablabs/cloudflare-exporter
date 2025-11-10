@@ -67,6 +67,9 @@ The exporter can be configured using env variables or command flags.
 | `SCRAPE_INTERVAL` | scrape interval in seconds (will query cloudflare every SCRAPE_INTERVAL seconds), default `60` |
 | `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported |
 | `ENABLE_PPROF` | (Optional) enable pprof profiling endpoints at `/debug/pprof/`. Accepts `true` or `false`, default `false`. **Warning**: Only enable in development/debugging environments |
+| `ENABLE_PATH_METRICS` | (Optional) enable path-level request metrics grouped by zone, path, and status. Accepts `true` or `false`, default `false`. Disabled for free-tier zones. |
+| `PATH_METRICS_LIMIT` | (Optional) maximum number of paths to track per zone. Default `100`, min `1`, max `1000`. Only used when `ENABLE_PATH_METRICS=true`. |
+| `PATH_METRICS_STATUS_FILTER` | (Optional) filter which HTTP status codes to collect for path metrics. Supports individual codes (`404,500`), ranges (`300-499`), or combinations (`404,500-599`). Empty (default) collects all status codes. Only used when `ENABLE_PATH_METRICS=true`. |
 | `ZONE_<NAME>` |  `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
 | `LOG_LEVEL` | Set loglevel. Options are error, warn, info, debug. default `error` |
 
@@ -86,6 +89,9 @@ Corresponding flags:
   -scrape_interval=60: scrape interval in seconds, defaults to 60
   -metrics_denylist="": cloudflare-exporter metrics to not export, comma delimited list
   -enable_pprof=false: enable pprof profiling endpoints at /debug/pprof/
+  -enable_path_metrics=false: enable path-level metrics grouped by zone, path, and status
+  -path_metrics_limit=100: maximum number of paths to track per zone (1-1000)
+  -path_metrics_status_filter="": HTTP status codes to collect (e.g., '404,500' or '300-499' or '404,500-599')
   -log_level="error": log level(error,warn,info,debug)
 ```
 
@@ -114,6 +120,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_requests_ssl_encrypted Number of encrypted requests for zone
 # HELP cloudflare_zone_requests_status Number of request for zone per HTTP status
 # HELP cloudflare_zone_requests_status_country_host Count of requests for zone per edge HTTP status per country per host
+# HELP cloudflare_zone_requests_status_path Number of requests for zone per HTTP status per path
 # HELP cloudflare_zone_requests_browser_map_page_views_count Number of successful requests for HTML pages per zone
 # HELP cloudflare_zone_requests_total Number of requests for zone
 # HELP cloudflare_zone_threats_country Threats per zone per country
@@ -177,6 +184,24 @@ Disable non-free metrics:
 
 ```
 docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e FREE_TIER=true ghcr.io/lablabs/cloudflare_exporter
+```
+
+Enable path-level metrics:
+
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e ENABLE_PATH_METRICS=true -e PATH_METRICS_LIMIT=50 ghcr.io/lablabs/cloudflare_exporter
+```
+
+Filter path metrics to only collect errors and redirects (3xx and 4xx/5xx):
+
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e ENABLE_PATH_METRICS=true -e PATH_METRICS_STATUS_FILTER="300-599" ghcr.io/lablabs/cloudflare_exporter
+```
+
+Filter path metrics to only collect specific status codes (404 and 500):
+
+```
+docker run --rm -p 8080:8080 -e CF_API_TOKEN=${CF_API_TOKEN} -e ENABLE_PATH_METRICS=true -e PATH_METRICS_STATUS_FILTER="404,500" ghcr.io/lablabs/cloudflare_exporter
 ```
 
 Access help:
