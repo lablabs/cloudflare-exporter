@@ -1,5 +1,9 @@
+# syntax=docker/dockerfile:1.6
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -13,7 +17,7 @@ RUN go mod download
 COPY *.go ./
 
 # Build the binary with static linking
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -extldflags '-static'" -o cloudflare_exporter .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-w -s -extldflags '-static'" -o cloudflare_exporter .
 
 # Final stage
 FROM alpine:latest

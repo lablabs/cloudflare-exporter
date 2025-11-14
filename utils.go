@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,49 @@ func NormalizePath(path string) string {
 		return "/"
 	}
 	return path
+}
+
+// NormalizePathAdvanced applies optional normalization to reduce cardinality.
+// It is controlled via environment flags:
+// - PATH_NORMALIZE_ENABLED (bool)
+// - PATH_KEEP_SEGMENTS (int)
+// - PATH_COLLAPSE_UUID (bool)
+func NormalizePathAdvanced(path string) string {
+	// Always apply base normalization first (strip query/fragment, handle empty)
+	path = NormalizePath(path)
+
+	if !viper.GetBool("path_normalize_enabled") {
+		return path
+	}
+
+	// Split into segments, ignoring empty segments to collapse duplicate slashes
+	rawSegments := strings.Split(path, "/")
+	segments := make([]string, 0, len(rawSegments))
+
+	collapseUUID := viper.GetBool("path_collapse_uuid")
+	uuidRe := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+	for _, seg := range rawSegments {
+		if seg == "" {
+			continue
+		}
+		if collapseUUID && uuidRe.MatchString(seg) {
+			seg = ":uuid"
+		}
+		segments = append(segments, seg)
+	}
+
+	// Keep only the first N segments if requested
+	keep := viper.GetInt("path_keep_segments")
+	if keep > 0 && keep < len(segments) {
+		segments = segments[:keep]
+	}
+
+	// Rebuild path, ensure leading slash, no trailing slash (except root)
+	if len(segments) == 0 {
+		return "/"
+	}
+	return "/" + strings.Join(segments, "/")
 }
 
 // ParseStatusFilter parses a status filter string and returns a function that checks if a status code should be included.

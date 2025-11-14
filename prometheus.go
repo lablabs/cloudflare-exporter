@@ -871,7 +871,7 @@ func fetchZonePathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 				continue
 			}
 
-			normalizedPath := NormalizePath(g.Dimensions.ClientRequestPath)
+			normalizedPath := NormalizePathAdvanced(g.Dimensions.ClientRequestPath)
 			zoneRequestStatusPath.With(
 				prometheus.Labels{
 					"zone":    name,
