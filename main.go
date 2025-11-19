@@ -281,11 +281,11 @@ func main() {
 	// Path normalization (to reduce cardinality of path metrics)
 	flags.Bool("path_normalize_enabled", false, "enable normalization of path labels for path metrics")
 	viper.BindEnv("path_normalize_enabled")
-	viper.SetDefault("path_normalize_enabled", false)
+	viper.SetDefault("path_normalize_enabled", true)
 
 	flags.Int("path_keep_segments", 0, "keep only the first N path segments (0 keeps all)")
 	viper.BindEnv("path_keep_segments")
-	viper.SetDefault("path_keep_segments", 0)
+	viper.SetDefault("path_keep_segments", 1)
 
 	flags.Bool("path_collapse_uuid", false, "collapse UUID-like path segments to :uuid")
 	viper.BindEnv("path_collapse_uuid")
