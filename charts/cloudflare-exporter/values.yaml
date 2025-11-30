@@ -9,8 +9,34 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   # tag: latest
+
+# Environment variables for the exporter
+# Example configuration:
+# env:
+#   - name: CF_API_KEY
+#     value: "your-api-key"
+#   - name: CF_API_EMAIL
+#     value: "your-email@example.com"
+#   - name: ENABLE_PATH_METRICS
+#     value: "true"
+#   - name: PATH_METRICS_LIMIT
+#     value: "100"
 env: []
+
+# Reference to a secret containing environment variables
+# Useful for sensitive data like CF_API_KEY or CF_API_TOKEN
 secretRef: ""
+
+# Path metrics configuration
+# Enable path-level metrics grouped by zone, path, and HTTP status code
+# Note: This feature is disabled by default and not recommended for free-tier accounts
+# as it can generate significant cardinality
+pathMetrics:
+  # Enable path metrics collection
+  enabled: false
+  # Maximum number of paths to track per zone (1-1000)
+  # Higher values increase cardinality and resource usage
+  limit: 100
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
