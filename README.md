@@ -65,7 +65,8 @@ The exporter can be configured using env variables or command flags.
 | `METRICS_PATH` |  path for metrics, default `/metrics` |
 | `SCRAPE_DELAY` | scrape delay in seconds, default `300` |
 | `SCRAPE_INTERVAL` | scrape interval in seconds (will query cloudflare every SCRAPE_INTERVAL seconds), default `60` |
-| `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported |
+| `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported. Cannot not be used with METRICS_ALLOWLIST. |
+| `METRICS_ALLOWLIST` | (Optional) cloudflare-exporter metrics to export *only*, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported Cannot not be used with METRICS_DENYLIST. |
 | `ENABLE_PPROF` | (Optional) enable pprof profiling endpoints at `/debug/pprof/`. Accepts `true` or `false`, default `false`. **Warning**: Only enable in development/debugging environments |
 | `ZONE_<NAME>` |  `DEPRECATED since 0.0.5` (optional) Zone ID. Add zones you want to scrape by adding env vars in this format. You can find the zone ids in Cloudflare dashboards. |
 | `LOG_LEVEL` | Set loglevel. Options are error, warn, info, debug. default `error` |
@@ -85,6 +86,7 @@ Corresponding flags:
   -scrape_delay=300: scrape delay in seconds, defaults to 300
   -scrape_interval=60: scrape interval in seconds, defaults to 60
   -metrics_denylist="": cloudflare-exporter metrics to not export, comma delimited list
+  -metrics_allowlist="": cloudflare-exporter metrics to export only, comma delimited list
   -enable_pprof=false: enable pprof profiling endpoints at /debug/pprof/
   -log_level="error": log level(error,warn,info,debug)
 ```

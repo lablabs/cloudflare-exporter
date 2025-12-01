@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -993,7 +994,7 @@ func filterNonFreePlanZones(zones []cfzones.Zone) (filteredZones []cfzones.Zone)
 		if extraFields["id"] == freePlanID {
 			continue
 		}
-		if !contains(zoneIDs, z.ID) {
+		if !slices.Contains(zoneIDs, z.ID) {
 			zoneIDs = append(zoneIDs, z.ID)
 			filteredZones = append(filteredZones, z)
 		}

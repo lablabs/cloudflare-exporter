@@ -1,19 +1,23 @@
 package main
 
 import (
+	"maps"
 	"net/http"
 	_ "net/http/pprof" // #nosec G108 - pprof is controlled via enable_pprof flag
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nelkinda/health-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
+	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
 	cfoption "github.com/cloudflare/cloudflare-go/v4/option"
 	cfzones "github.com/cloudflare/cloudflare-go/v4/zones"
 	"github.com/sirupsen/logrus"
@@ -76,15 +80,6 @@ func filterZones(all []cfzones.Zone, target []string) []cfzones.Zone {
 	return filtered
 }
 
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
 func filterExcludedZones(all []cfzones.Zone, exclude []string) []cfzones.Zone {
 	var filtered []cfzones.Zone
 
@@ -93,7 +88,7 @@ func filterExcludedZones(all []cfzones.Zone, exclude []string) []cfzones.Zone {
 	}
 
 	for _, z := range all {
-		if contains(exclude, z.ID) {
+		if slices.Contains(exclude, z.ID) {
 			log.Info("Exclude zone: ", z.ID, " ", z.Name)
 		} else {
 			filtered = append(filtered, z)
@@ -103,67 +98,34 @@ func filterExcludedZones(all []cfzones.Zone, exclude []string) []cfzones.Zone {
 	return filtered
 }
 
-func fetchMetrics() {
+func fetchMetrics(accounts []cfaccounts.Account, zones []cfzones.Zone, metrics MetricsMap) {
 	var wg sync.WaitGroup
-	accounts := fetchAccounts()
 
 	for _, a := range accounts {
-		wg.Add(1)
-		go fetchWorkerAnalytics(a, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForAccount(a, &wg)
-
-		wg.Add(1)
-		go fetchR2StorageForAccount(a, &wg)
-
-		wg.Add(1)
-		go fetchLoadblancerPoolsHealth(a, &wg)
-
-		wg.Add(1)
-		go fetchZeroTrustAnalyticsForAccount(a, &wg)
+		wg.Go(func() { fetchWorkerAnalytics(metrics, a) })
+		wg.Go(func() { fetchLogpushAnalyticsForAccount(metrics, a) })
+		wg.Go(func() { fetchR2StorageForAccount(metrics, a) })
+		wg.Go(func() { fetchLoadblancerPoolsHealth(metrics, a) })
+		wg.Go(func() { fetchZeroTrustAnalyticsForAccount(metrics, a) })
 	}
 
-	zones := fetchZones(accounts)
-	tzones := getTargetZones()
-	fzones := filterZones(zones, tzones)
-	ezones := getExcludedZones()
-	filteredZones := filterExcludedZones(fzones, ezones)
-	if !viper.GetBool("free_tier") {
-		filteredZones = filterNonFreePlanZones(filteredZones)
-	}
-
-	zoneCount := len(filteredZones)
-	if zoneCount > 0 && zoneCount <= cfgraphqlreqlimit {
-		wg.Add(1)
-		go fetchZoneAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchZoneColocationAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLoadBalancerAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
-	} else if zoneCount > cfgraphqlreqlimit {
-		for s := 0; s < zoneCount; s += cfgraphqlreqlimit {
-			e := s + cfgraphqlreqlimit
-			if e > zoneCount {
-				e = zoneCount
-			}
-			wg.Add(1)
-			go fetchZoneAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchZoneColocationAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLoadBalancerAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
+	// if target zones weren't provided, pull zones each loop
+	// that way we catch zones that get added since the exporter
+	// was started
+	if len(zones) == 0 {
+		zones = fetchZones(accounts)
+		ezones := getExcludedZones()
+		zones = filterExcludedZones(zones, ezones)
+		if !viper.GetBool("free_tier") {
+			zones = filterNonFreePlanZones(zones)
 		}
+	}
+
+	for zonesChunk := range slices.Chunk(zones, cfgraphqlreqlimit) {
+		wg.Go(func() { fetchZoneAnalytics(metrics, zonesChunk) })
+		wg.Go(func() { fetchZoneColocationAnalytics(metrics, zonesChunk) })
+		wg.Go(func() { fetchLoadBalancerAnalytics(metrics, zonesChunk) })
+		wg.Go(func() { fetchLogpushAnalyticsForZone(metrics, zonesChunk) })
 	}
 
 	wg.Wait()
@@ -181,23 +143,54 @@ func runExporter() {
 		log.Warn("pprof enabled - profiling endpoints available at /debug/pprof/")
 	}
 
-	metricsDenylist := []string{}
-	if len(viper.GetString("metrics_denylist")) > 0 {
-		metricsDenylist = strings.Split(viper.GetString("metrics_denylist"), ",")
+	var enabledMetrics MetricsMap
+
+	denylist := viper.GetString("metrics_denylist")
+	allowlist := viper.GetString("metrics_allowlist")
+
+	if denylist != "" && allowlist != "" {
+		log.Fatalf("Only one of `metrics_denylist` or `metrics_allowlist` can be set")
 	}
-	metricsSet, err := buildFilteredMetricsSet(metricsDenylist)
-	if err != nil {
-		log.Fatalf("Error building metrics set: %v", err)
+
+	if denylist != "" {
+		var err error
+		enabledMetrics, err = buildDeniedMetricsSet(strings.Split(denylist, ","))
+		if err != nil {
+			log.Fatalf("Error building metrics set: %v", err)
+		}
+	} else if allowlist != "" {
+		var err error
+		enabledMetrics, err = buildAllowedMetricsSet(strings.Split(allowlist, ","))
+		if err != nil {
+			log.Fatalf("Error building metrics set: %v", err)
+		}
+	} else {
+		enabledMetrics = metricsMap
 	}
-	log.Debugf("Metrics set: %v", metricsSet)
-	mustRegisterMetrics(metricsSet)
+
+	log.Infof("Metrics set: %v", slices.Sorted(maps.Keys(enabledMetrics)))
+	for _, metric := range enabledMetrics {
+		prometheus.MustRegister(metric)
+	}
 
 	scrapeInterval := time.Duration(viper.GetInt("scrape_interval")) * time.Second
 	log.Info("Scrape interval set to ", scrapeInterval)
 
 	go func() {
-		for ; true; <-time.NewTicker(scrapeInterval).C {
-			go fetchMetrics()
+		accounts := fetchAccounts()
+
+		// if the target zones argument is set, we only
+		// need to pull zone info once
+		var zones []cfzones.Zone
+		tzones := getTargetZones()
+		if len(tzones) > 0 {
+			zones = fetchZones(accounts)
+			zones = filterZones(zones, tzones)
+		}
+
+		go fetchMetrics(accounts, zones, enabledMetrics)
+		for range time.Tick(scrapeInterval) {
+			go fetchMetrics(accounts, zones, enabledMetrics)
 		}
 	}()
 
@@ -278,6 +271,10 @@ func main() {
 	flags.String("metrics_denylist", "", "metrics to not expose, comma delimited list")
 	viper.BindEnv("metrics_denylist")
 	viper.SetDefault("metrics_denylist", "")
+
+	flags.String("metrics_allowlist", "", "exclusive set of metrics to expose, comma delimited list")
+	viper.BindEnv("metrics_allowlist")
+	viper.SetDefault("metrics_allowlist", "")
 
 	flags.String("log_level", "info", "log level")
 	viper.BindEnv("log_level")
