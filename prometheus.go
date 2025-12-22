@@ -63,6 +63,8 @@ const (
 	tunnelHealthStatusMetricName                    MetricName = "cloudflare_tunnel_health_status"
 	tunnelConnectorInfoMetricName                   MetricName = "cloudflare_tunnel_connector_info"
 	tunnelConnectorActiveConnectionsMetricName      MetricName = "cloudflare_tunnel_connector_active_connections"
+	zoneRequestASNMetricName                        MetricName = "cloudflare_zone_requests_asn"
+	zoneBandwidthASNMetricName                      MetricName = "cloudflare_zone_bandwidth_asn"
 )
 
 type MetricsSet map[MetricName]struct{}
@@ -334,6 +336,16 @@ var (
 		Name: tunnelConnectorActiveConnectionsMetricName.String(),
 		Help: "Reports number of active connections for a Cloudflare Tunnel connector",
 	}, []string{"account", "tunnel_id", "client_id"})
+
+	zoneRequestASN = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestASNMetricName.String(),
+		Help: "Number of requests per ASN (Autonomous System Number)",
+	}, []string{"zone", "account", "asn", "asn_description"})
+
+	zoneBandwidthASN = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneBandwidthASNMetricName.String(),
+		Help: "Bandwidth per ASN (Autonomous System Number) in bytes",
+	}, []string{"zone", "account", "asn", "asn_description"})
 )
 
 func buildAllMetricsSet() MetricsSet {
@@ -377,6 +389,8 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(tunnelHealthStatusMetricName)
 	allMetricsSet.Add(tunnelConnectorInfoMetricName)
 	allMetricsSet.Add(tunnelConnectorActiveConnectionsMetricName)
+	allMetricsSet.Add(zoneRequestASNMetricName)
+	allMetricsSet.Add(zoneBandwidthASNMetricName)
 	return allMetricsSet
 }
 
@@ -522,6 +536,12 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	}
 	if !deniedMetrics.Has(tunnelConnectorActiveConnectionsMetricName) {
 		prometheus.MustRegister(tunnelConnectorActiveConnections)
+	}
+	if !deniedMetrics.Has(zoneRequestASNMetricName) {
+		prometheus.MustRegister(zoneRequestASN)
+	}
+	if !deniedMetrics.Has(zoneBandwidthASNMetricName) {
+		prometheus.MustRegister(zoneBandwidthASN)
 	}
 }
 
@@ -1036,5 +1056,50 @@ func getCloudflareTunnelStatusValue(status string) uint8 {
 	default:
 		// Undefined status value returned by the API
 		return 255
+	}
+}
+
+func fetchZoneASNAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// ASN metrics are not available in free tier
+	if viper.GetBool("free_tier") {
+		return
+	}
+
+	zoneIDs := extractZoneIDs(zones)
+	if len(zoneIDs) == 0 {
+		return
+	}
+
+	r, err := fetchASNTotals(zoneIDs)
+	if err != nil {
+		return
+	}
+
+	for _, z := range r.Viewer.Zones {
+		name, account := findZoneAccountName(zones, z.ZoneTag)
+		addASNGroups(&z, name, account)
+	}
+}
+
+func addASNGroups(z *zoneRespASN, name string, account string) {
+	if len(z.HttpRequestsASNGroups) == 0 {
+		return
+	}
+
+	for _, g := range z.HttpRequestsASNGroups {
+		asn := fmt.Sprintf("%d", g.Dimensions.ClientASN)
+		asnDesc := g.Dimensions.ClientASNDescription
+		if asnDesc == "" {
+			asnDesc = "unknown"
+		}
+
+		zoneRequestASN.With(prometheus.Labels{
+			"zone": name, "account": account, "asn": asn, "asn_description": asnDesc,
+		}).Add(float64(g.Count))
+		zoneBandwidthASN.With(prometheus.Labels{
+			"zone": name, "account": account, "asn": asn, "asn_description": asnDesc,
+		}).Add(float64(g.Sum.EdgeResponseBytes))
 	}
 }

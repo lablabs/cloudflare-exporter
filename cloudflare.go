@@ -85,6 +85,29 @@ type cloudflareResponseLogpushZone struct {
 	} `json:"viewer"`
 }
 
+type cloudflareResponseASN struct {
+	Viewer struct {
+		Zones []zoneRespASN `json:"zones"`
+	} `json:"viewer"`
+}
+
+type zoneRespASN struct {
+	ZoneTag string `json:"zoneTag"`
+
+	HttpRequestsASNGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			Datetime             string `json:"datetime"`
+			ClientASN            int    `json:"clientASN"`
+			ClientASNDescription string `json:"clientASNDescription"`
+		} `json:"dimensions"`
+		Sum struct {
+			EdgeResponseBytes uint64 `json:"edgeResponseBytes"`
+			Visits            uint64 `json:"visits"`
+		} `json:"sum"`
+	} `json:"httpRequestsAdaptiveGroups"`
+}
+
 type logpushResponse struct {
 	LogpushHealthAdaptiveGroups []struct {
 		Count uint64 `json:"count"`
@@ -1009,4 +1032,55 @@ func filterNonFreePlanZones(zones []cfzones.Zone) (filteredZones []cfzones.Zone)
 		}
 	}
 	return
+}
+
+func fetchASNTotals(zoneIDs []string) (*cloudflareResponseASN, error) {
+	request := graphql.NewRequest(`
+	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+		viewer {
+			zones(filter: { zoneTag_in: $zoneIDs }) {
+				zoneTag
+				httpRequestsAdaptiveGroups(
+					limit: $limit
+					filter: { datetime_geq: $mintime, datetime_lt: $maxtime }
+					orderBy: [count_DESC]
+				) {
+					count
+					avg {
+						sampleInterval
+					}
+					dimensions {
+						datetime
+						clientASN
+						clientASNDescription
+					}
+					sum {
+						edgeResponseBytes
+						visits
+					}
+				}
+			}
+		}
+	}
+`)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	var resp cloudflareResponseASN
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("failed to fetch ASN totals, err:%v", err)
+		return nil, err
+	}
+
+	return &resp, nil
 }

@@ -146,6 +146,9 @@ func fetchMetrics() {
 
 		wg.Add(1)
 		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
+
+		wg.Add(1)
+		go fetchZoneASNAnalytics(filteredZones, &wg)
 	} else if zoneCount > cfgraphqlreqlimit {
 		for s := 0; s < zoneCount; s += cfgraphqlreqlimit {
 			e := s + cfgraphqlreqlimit
@@ -163,6 +166,9 @@ func fetchMetrics() {
 
 			wg.Add(1)
 			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
+
+			wg.Add(1)
+			go fetchZoneASNAnalytics(filteredZones[s:e], &wg)
 		}
 	}
 
