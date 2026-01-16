@@ -1,0 +1,54 @@
+name: Helm CI
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'charts/cloudflare-exporter/**'
+  pull_request:
+    paths:
+      - 'charts/cloudflare-exporter/**'
+  workflow_dispatch:
+    inputs:
+      chart_path:
+        type: string
+        required: false
+        default: "charts/cloudflare-exporter"
+        description: Path to Helm chart
+
+jobs:
+  lint-chart:
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: transmitsecurity-dev/devops-internal-tools/.github/workflows/devops-helm-charts-ci.yml@main
+    secrets: inherit
+    with:
+      chart_path: "charts/cloudflare-exporter"
+      charts_dir: "charts"
+      repo: cloudflare-exporter
+      base_branch: "master"
+      head: ${{ github.ref_name }}
+      update_version: false
+
+  helm-ci:
+    if: ${{ github.event_name != 'workflow_dispatch' && github.event_name != 'pull_request' }}
+    uses: transmitsecurity-dev/devops-internal-tools/.github/workflows/devops-charts-release.yml@main
+    secrets: inherit
+    with:
+      chart_path: "charts/cloudflare-exporter"
+      repo: cloudflare-exporter
+      base_branch: "master"
+      update_version: true
+      registry_url: "oci://europe-docker.pkg.dev/jarp-prod-eu/core"
+
+  manual-helm-ci:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: transmitsecurity-dev/devops-internal-tools/.github/workflows/devops-helm-charts-ci.yml@main
+    secrets: inherit
+    with:
+      chart_path: "${{ inputs.chart_path }}"
+      charts_dir: "charts"
+      repo: cloudflare-exporter
+      base_branch: "master"
+      head: ${{ github.ref_name }}
+      update_version: true
