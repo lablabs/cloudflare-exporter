@@ -44,6 +44,12 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
+            {{- if .Values.pathMetrics.enabled }}
+            - name: ENABLE_PATH_METRICS
+              value: "true"
+            - name: PATH_METRICS_LIMIT
+              value: {{ .Values.pathMetrics.limit | quote }}
+            {{- end }}
             {{- toYaml .Values.env | nindent 12 }}
           {{- if .Values.secretRef }}
           envFrom:

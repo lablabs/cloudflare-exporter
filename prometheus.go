@@ -29,6 +29,7 @@ const (
 	zoneRequestBrowserMapMetricName              MetricName = "cloudflare_zone_requests_browser_map_page_views_count"
 	zoneRequestOriginStatusCountryHostMetricName MetricName = "cloudflare_zone_requests_origin_status_country_host"
 	zoneRequestStatusCountryHostMetricName       MetricName = "cloudflare_zone_requests_status_country_host"
+	zoneRequestStatusPathMetricName              MetricName = "cloudflare_zone_requests_status_path"
 	zoneBandwidthTotalMetricName                 MetricName = "cloudflare_zone_bandwidth_total"
 	zoneBandwidthCachedMetricName                MetricName = "cloudflare_zone_bandwidth_cached"
 	zoneBandwidthSSLEncryptedMetricName          MetricName = "cloudflare_zone_bandwidth_ssl_encrypted"
@@ -127,6 +128,12 @@ var (
 		Name: zoneRequestStatusCountryHostMetricName.String(),
 		Help: "Count of requests for zone per edge HTTP status per country per host",
 	}, []string{"zone", "account", "status", "country", "host"},
+	)
+
+	zoneRequestStatusPath = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: zoneRequestStatusPathMetricName.String(),
+		Help: "Number of requests for zone per HTTP status per path",
+	}, []string{"zone", "account", "status", "path"},
 	)
 
 	zoneBandwidthTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -326,6 +333,7 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(zoneRequestBrowserMapMetricName)
 	allMetricsSet.Add(zoneRequestOriginStatusCountryHostMetricName)
 	allMetricsSet.Add(zoneRequestStatusCountryHostMetricName)
+	allMetricsSet.Add(zoneRequestStatusPathMetricName)
 	allMetricsSet.Add(zoneBandwidthTotalMetricName)
 	allMetricsSet.Add(zoneBandwidthCachedMetricName)
 	allMetricsSet.Add(zoneBandwidthSSLEncryptedMetricName)
@@ -399,6 +407,9 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	}
 	if !deniedMetrics.Has(zoneRequestStatusCountryHostMetricName) {
 		prometheus.MustRegister(zoneRequestStatusCountryHost)
+	}
+	if !deniedMetrics.Has(zoneRequestStatusPathMetricName) {
+		prometheus.MustRegister(zoneRequestStatusPath)
 	}
 	if !deniedMetrics.Has(zoneBandwidthTotalMetricName) {
 		prometheus.MustRegister(zoneBandwidthTotal)
@@ -814,6 +825,61 @@ func addHTTPAdaptiveGroups(z *zoneResp, name string, account string) {
 				"country": g.Dimensions.ClientCountryName,
 				"host":    g.Dimensions.ClientRequestHTTPHost,
 			}).Add(float64(g.Count))
+	}
+}
+
+func fetchZonePathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer wg.Done()
+
+	// Only fetch if enabled
+	if !viper.GetBool("enable_path_metrics") {
+		return
+	}
+
+	// Path metrics not available in free tier
+	if viper.GetBool("free_tier") {
+		return
+	}
+
+	zoneIDs := extractZoneIDs(zones)
+	if len(zoneIDs) == 0 {
+		return
+	}
+
+	// Parse status filter
+	statusFilter, err := ParseStatusFilter(viper.GetString("path_metrics_status_filter"))
+	if err != nil {
+		log.Error("failed to parse status filter: ", err)
+		return
+	}
+
+	limit := viper.GetInt("path_metrics_limit")
+	r, err := fetchPathMetrics(zoneIDs, limit)
+	if err != nil {
+		log.Error("failed to fetch path metrics: ", err)
+		return
+	}
+
+	for _, z := range r.Viewer.Zones {
+		name, account := findZoneAccountName(zones, z.ZoneTag)
+		for _, g := range z.HTTPRequestsPathStatusGroups {
+			status := int(g.Dimensions.EdgeResponseStatus)
+
+			// Apply status filter
+			if !statusFilter(status) {
+				continue
+			}
+
+			normalizedPath := NormalizePathAdvanced(g.Dimensions.ClientRequestPath)
+			zoneRequestStatusPath.With(
+				prometheus.Labels{
+					"zone":    name,
+					"account": account,
+					"status":  strconv.Itoa(status),
+					"path":    normalizedPath,
+				}).Add(float64(g.Count))
+		}
 	}
 }
 

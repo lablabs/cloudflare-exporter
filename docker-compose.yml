@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  cloudflare-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloudflare-exporter:latest
+    container_name: cloudflare-exporter
+    ports:
+      - "8090:8080"
+    environment:
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - ENABLE_PATH_METRICS=true
+      - PATH_METRICS_LIMIT=100
+      - PATH_METRICS_STATUS_FILTER=300-503
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - cloudflare-exporter
+
+volumes:
+  prometheus-data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge
