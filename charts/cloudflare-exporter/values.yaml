@@ -16,6 +16,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 podAnnotations: {}
+podLabels: {}
 
 deploymentAnnotations: {}
 
@@ -63,6 +64,9 @@ serviceMonitor:
   # Set of labels to transfer on the Kubernetes Service onto the target.
   targetLabels: []
   metricRelabelings: []
+
+# Set priority class name https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass
+priorityClassName: ""
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious

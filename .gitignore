@@ -4,7 +4,9 @@
 *.dll
 *.so
 *.dylib
+cloudflare-exporter
 cloudflare_exporter
+dist/
 
 # Test binary, built with `go test -c`
 *.test
@@ -25,3 +27,5 @@ vendor/
 *.swp
 
 .idea/
+.env
+venom*

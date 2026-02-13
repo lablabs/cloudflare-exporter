@@ -1,11 +1,38 @@
+version: "2"
 linters:
-  enable:
-    - megacheck
-    - gofmt
-    - govet
-    - revive # replacement for golint
-
-linters-settings:
-  gofmt:
-    # simplify code: gofmt with `-s` option, true by default
-    simplify: true
+    enable:
+        - asciicheck
+        - errorlint
+        - gosec
+        - importas
+        - misspell
+        - revive
+        - staticcheck
+        - unconvert
+        - whitespace
+    disable:
+        - errcheck
+    exclusions:
+        generated: lax
+        presets:
+            - comments
+            - common-false-positives
+            - legacy
+            - std-error-handling
+        paths:
+            - third_party$
+            - builtin$
+            - examples$
+formatters:
+    enable:
+        - gofmt
+        - goimports
+    settings:
+        gofmt:
+            simplify: true
+    exclusions:
+        generated: lax
+        paths:
+            - third_party$
+            - builtin$
+            - examples$

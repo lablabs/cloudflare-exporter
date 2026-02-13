@@ -19,7 +19,10 @@ spec:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        {{- include "cloudflare-exporter.selectorLabels" . | nindent 8 }}
+        {{- include "cloudflare-exporter.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -47,6 +50,9 @@ spec:
             - secretRef:
                 name: {{ .Values.secretRef }}
           {{- end }}
+      {{- with .Values.priorityClassName}}
+      priorityClassName: {{ . }}
+      {{- end}}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

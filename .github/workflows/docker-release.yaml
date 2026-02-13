@@ -4,55 +4,115 @@ on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+      - 'cloudflare-exporter-[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build-and-push-docker-image:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
     name: Build Docker image and push to repositories with version tag
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v3
-        with:
-          images: |
-            lablabs/cloudflare_exporter
-            ghcr.io/lablabs/cloudflare_exporter
-          # generate Docker tags based on the following events/attributes
-          tags: type=ref,event=tag
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Strip 'cloudflare-exporter-' prefix if present
+          VERSION="${TAG#cloudflare-exporter-}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
 
       - name: Login to Github Packages
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image and push to Docker Hub and GitHub Container Registry
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          push: true
 
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
-  
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+
+      - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d # v0.9
+        with:
+          version: v0.18.0
+      - name: Build and push
+        id: publish-image
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+          KO_DOCKER_REPO: "ghcr.io/${{ github.repository }}"
+        run: |
+          ko build . --sbom=none --image-refs ./image-digest --bare --platform linux/arm64,linux/amd64 -t ${IMAGE_VERSION} \
+            --image-label org.opencontainers.image.title=cloudflare-exporter \
+            --image-label org.opencontainers.image.description="Prometheus CloudFlare Exporter" \
+            --image-label org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }} \
+            --image-label org.opencontainers.image.revision=${{ github.sha }} \
+            --image-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --image-label org.opencontainers.image.licenses=Apache-2.0 \
+            --image-label org.opencontainers.image.version=${IMAGE_VERSION} \
+            --image-label org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          # Extract image digest from ko output
+          # The file contains multiple lines (one per platform + manifest list at the end)
+          # We need only the last line (manifest list) for attestation
+          cat ./image-digest
+          IMAGE_REF=$(head -n 1 ./image-digest)
+          IMAGE_DIGEST=$(echo "$IMAGE_REF" | cut -d'@' -f2)
+
+          echo "Image reference: $IMAGE_REF"
+          echo "Image digest: $IMAGE_DIGEST"
+
+          echo "digest=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "image-ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v3
+        id: attest
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.publish-image.outputs.digest }}
+          push-to-registry: true
+
+  distribute-to-dockerhub:
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-push-docker-image
+    permissions:
+      packages: read
+    steps:
+      # Extract version again since this job runs on a different runner
+      # and doesn't have access to outputs from the previous job's steps
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Strip 'cloudflare-exporter-' prefix if present
+          VERSION="${TAG#cloudflare-exporter-}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      - name: Copy image to dockerhub
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+          GHCR_REPO: "ghcr.io/${{ github.repository }}"
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          docker run --rm quay.io/containers/skopeo:v1.18.0 \
+            copy --multi-arch all \
+            --src-creds "$GHCR_USERNAME:$GHCR_PASSWORD" \
+            --dest-creds "$DOCKER_USERNAME:$DOCKER_TOKEN" \
+            docker://${GHCR_REPO}:${IMAGE_VERSION} \
+            docker://lablabs/cloudflare_exporter:${IMAGE_VERSION}

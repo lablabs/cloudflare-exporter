@@ -2,15 +2,22 @@ package main
 
 import (
 	"context"
-	"time"
+	"strings"
 
-	"github.com/cloudflare/cloudflare-go"
+	cf "github.com/cloudflare/cloudflare-go/v4"
+	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
+	cfload_balancers "github.com/cloudflare/cloudflare-go/v4/load_balancers"
+	cfpagination "github.com/cloudflare/cloudflare-go/v4/packages/pagination"
+	cfrulesets "github.com/cloudflare/cloudflare-go/v4/rulesets"
+	cfzero_trust "github.com/cloudflare/cloudflare-go/v4/zero_trust"
+	cfzones "github.com/cloudflare/cloudflare-go/v4/zones"
+
 	"github.com/machinebox/graphql"
-	log "github.com/sirupsen/logrus"
 )
 
-var (
-	cfGraphQLEndpoint = "https://api.cloudflare.com/client/v4/graphql/"
+const (
+	freePlanID      = "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	apiPerPageLimit = 999
 )
 
 type cloudflareResponse struct {
@@ -35,6 +42,79 @@ type cloudflareResponseLb struct {
 	Viewer struct {
 		Zones []lbResp `json:"zones"`
 	} `json:"viewer"`
+}
+
+type cloudflareResponseLogpushAccount struct {
+	Viewer struct {
+		Accounts []logpushResponse `json:"accounts"`
+	} `json:"viewer"`
+}
+
+type r2AccountResp struct {
+	R2StorageGroups []struct {
+		Dimensions struct {
+			BucketName string `json:"bucketName"`
+		} `json:"dimensions"`
+		Max struct {
+			MetadataSize uint64 `json:"metadataSize"`
+			PayloadSize  uint64 `json:"payloadSize"`
+			ObjectCount  uint64 `json:"objectCount"`
+		} `json:"max"`
+	} `json:"r2StorageAdaptiveGroups"`
+
+	R2StorageOperations []struct {
+		Dimensions struct {
+			Action     string `json:"actionType"`
+			BucketName string `json:"bucketName"`
+		} `json:"dimensions"`
+		Sum struct {
+			Requests uint64 `json:"requests"`
+		} `json:"sum"`
+	} `json:"r2OperationsAdaptiveGroups"`
+}
+
+type cloudflareResponseR2Account struct {
+	Viewer struct {
+		Accounts []r2AccountResp `json:"accounts"`
+	}
+}
+
+type cloudflareResponseLogpushZone struct {
+	Viewer struct {
+		Zones []logpushResponse `json:"zones"`
+	} `json:"viewer"`
+}
+
+type cloudflareResponseEdgeErrorsByPath struct {
+	Viewer struct {
+		Zones []zoneRespEdgeErrorsByPath `json:"zones"`
+	} `json:"viewer"`
+}
+
+type zoneRespEdgeErrorsByPath struct {
+	ZoneTag                    string `json:"zoneTag"`
+	HTTPRequestsAdaptiveGroups []struct {
+		Count      uint64 `json:"count"`
+		Dimensions struct {
+			EdgeResponseStatus    uint16 `json:"edgeResponseStatus"`
+			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
+			ClientRequestPath     string `json:"clientRequestPath"`
+		} `json:"dimensions"`
+	} `json:"httpRequestsAdaptiveGroups"`
+}
+
+type logpushResponse struct {
+	LogpushHealthAdaptiveGroups []struct {
+		Count uint64 `json:"count"`
+
+		Dimensions struct {
+			Datetime        string `json:"datetime"`
+			DestinationType string `json:"destinationType"`
+			JobID           int    `json:"jobId"`
+			Status          int    `json:"status"`
+			Final           int    `json:"final"`
+		}
+	} `json:"logpushHealthAdaptiveGroups"`
 }
 
 type accountResp struct {
@@ -142,6 +222,7 @@ type zoneResp struct {
 		Dimensions struct {
 			Action                string `json:"action"`
 			Source                string `json:"source"`
+			RuleID                string `json:"ruleId"`
 			ClientCountryName     string `json:"clientCountryName"`
 			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
@@ -154,6 +235,11 @@ type zoneResp struct {
 			ClientCountryName     string `json:"clientCountryName"`
 			ClientRequestHTTPHost string `json:"clientRequestHTTPHost"`
 		} `json:"dimensions"`
+		Quantile struct {
+			OriginResponseDurationMsP50 uint `json:"originResponseDurationMsP50"`
+			OriginResponseDurationMsP95 uint `json:"originResponseDurationMsP95"`
+			OriginResponseDurationMsP99 uint `json:"originResponseDurationMsP99"`
+		} `json:"quantiles"`
 	} `json:"httpRequestsAdaptiveGroups"`
 
 	HTTPRequestsEdgeCountryHost []struct {
@@ -221,54 +307,217 @@ type lbResp struct {
 	ZoneTag string `json:"zoneTag"`
 }
 
-func fetchZones() []cloudflare.Zone {
-	var api *cloudflare.API
-	var err error
-	if len(cfgCfAPIToken) > 0 {
-		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
-	} else {
-		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ctx := context.Background()
-	z, err := api.ListZones(ctx)
-	if err != nil {
-		log.Fatal(err)
+func fetchLoadblancerPools(account cfaccounts.Account) []cfload_balancers.Pool {
+	var cfPools []cfload_balancers.Pool
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page := cfclient.LoadBalancers.Pools.ListAutoPaging(ctx,
+		cfload_balancers.PoolListParams{
+			AccountID: cf.F(account.ID),
+		})
+	if page.Err() != nil {
+		log.Errorf("error fetching loadbalancer pools, err:%v", page.Err())
+		return nil
 	}
 
-	return z
+	seenIDs := make(map[string]struct{})
+	for page.Next() {
+		if page.Err() != nil {
+			log.Errorf("error during paging pools: %v", page.Err())
+			break
+		}
+		pool := page.Current()
+		if _, exists := seenIDs[pool.ID]; exists {
+			log.Errorf("fetchLoadbalancerPools: duplicate pool ID detected (%s), breaking loop", pool.ID)
+			break
+		}
+		seenIDs[pool.ID] = struct{}{}
+		cfPools = append(cfPools, pool)
+	}
+
+	return cfPools
 }
 
-func fetchAccounts() []cloudflare.Account {
-	var api *cloudflare.API
+func getAccountZoneList(accountID string) ([]cfzones.Zone, error) {
+	var zoneList []cfzones.Zone
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page := cfclient.Zones.ListAutoPaging(ctx, cfzones.ZoneListParams{
+		Account: cf.F(cfzones.ZoneListParamsAccount{ID: cf.F(accountID)}),
+		PerPage: cf.F(float64(apiPerPageLimit)),
+	})
+	if page.Err() != nil {
+		return nil, page.Err()
+	}
+
+	seenIDs := make(map[string]struct{})
+	for page.Next() {
+		if page.Err() != nil {
+			log.Errorf("error during paging zoneList: %v", page.Err())
+			break
+		}
+		zone := page.Current()
+		if _, exists := seenIDs[zone.ID]; exists {
+			log.Errorf("getAccountZoneList: duplicate zone ID detected (%s), breaking loop", zone.ID)
+			break
+		}
+		seenIDs[zone.ID] = struct{}{}
+		zoneList = append(zoneList, zone)
+	}
+
+	return zoneList, nil
+}
+
+func fetchZones(accounts []cfaccounts.Account) []cfzones.Zone {
+	var zones []cfzones.Zone
+
+	for _, account := range accounts {
+		z, err := getAccountZoneList(account.ID)
+
+		if err != nil {
+			log.Errorf("error fetching zones: %v", err)
+			continue
+		}
+		zones = append(zones, z...)
+	}
+	return zones
+}
+
+func getRuleSetsList(params cfrulesets.RulesetListParams) ([]cfrulesets.RulesetListResponse, error) {
+	var ruleSetList []cfrulesets.RulesetListResponse
+	var page *cfpagination.CursorPagination[cfrulesets.RulesetListResponse]
 	var err error
-	if len(cfgCfAPIToken) > 0 {
-		api, err = cloudflare.NewWithAPIToken(cfgCfAPIToken)
-	} else {
-		api, err = cloudflare.New(cfgCfAPIKey, cfgCfAPIEmail)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page, err = cfclient.Rulesets.List(ctx, params)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	ctx := context.Background()
-	a, _, err := api.Accounts(ctx, cloudflare.AccountsListParams{PaginationOptions: cloudflare.PaginationOptions{PerPage: 100}})
-	if err != nil {
-		log.Fatal(err)
+	ruleSetList = append(ruleSetList, page.Result...)
+
+	for page.ResultInfo.Cursor != "" {
+		params.Cursor = cf.F(page.ResultInfo.Cursor)
+		ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+		page, err = cfclient.Rulesets.List(ctx, params)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		ruleSetList = append(ruleSetList, page.Result...)
 	}
 
-	return a
+	return ruleSetList, nil
+}
+
+func fetchFirewallRules(zoneID string) map[string]string {
+	listOfRulesets, err := getRuleSetsList(cfrulesets.RulesetListParams{
+		ZoneID: cf.F(zoneID),
+	})
+	if err != nil {
+		log.Errorf("error fetching firewall rules, ZoneID:%s, Err:%v", zoneID, err)
+		return nil
+	}
+
+	firewallRulesMap := make(map[string]string)
+
+	for _, rulesetDesc := range listOfRulesets {
+		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallManaged {
+			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
+				ZoneID: cf.F(zoneID),
+			})
+			if err != nil {
+				log.Errorf("error fetching ruleset for managed firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
+				cancel()
+				continue
+			}
+			cancel()
+			for _, rule := range ruleset.Rules {
+				firewallRulesMap[rule.ID] = rule.Description
+			}
+		}
+
+		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallCustom {
+			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
+				ZoneID: cf.F(zoneID),
+			})
+			if err != nil {
+				log.Errorf("error fetching ruleset for custom firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
+				cancel()
+				continue
+			}
+			cancel()
+			for _, rule := range ruleset.Rules {
+				firewallRulesMap[rule.ID] = rule.Description
+			}
+		}
+	}
+
+	return firewallRulesMap
+}
+
+func fetchAccounts(targetAccountIDs []string) []cfaccounts.Account {
+	var cfAccounts []cfaccounts.Account
+
+	if len(targetAccountIDs) > 0 {
+		log.Info("Using provided account IDs (account-scoped token mode)")
+		for _, accountID := range targetAccountIDs {
+			accountID = strings.TrimSpace(accountID)
+			if accountID == "" {
+				continue
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+			account, err := cfclient.Accounts.Get(ctx, cfaccounts.AccountGetParams{
+				AccountID: cf.F(accountID),
+			})
+			cancel()
+
+			if err != nil {
+				log.Warnf("Account %s details unavailable, using ID only: %v", accountID, err)
+				cfAccounts = append(cfAccounts, cfaccounts.Account{
+					ID: accountID,
+				})
+			} else {
+				cfAccounts = append(cfAccounts, *account)
+			}
+		}
+		log.Infof("Loaded %d account(s) from CF_ACCOUNTS", len(cfAccounts))
+		return cfAccounts
+	}
+
+	log.Info("Listing all accessible accounts (user-level token mode)")
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page := cfclient.Accounts.ListAutoPaging(ctx,
+		cfaccounts.AccountListParams{
+			PerPage: cf.F(float64(apiPerPageLimit)),
+		})
+	if page.Err() != nil {
+		log.Errorf("error fetching accounts:%v", page.Err())
+		return nil
+	}
+
+	seenIDs := make(map[string]struct{})
+	for page.Next() {
+		if page.Err() != nil {
+			log.Errorf("error during paging accounts: %v", page.Err())
+			break
+		}
+		account := page.Current()
+		if _, exists := seenIDs[account.ID]; exists {
+			log.Errorf("fetchAccounts: duplicate account ID detected (%s), breaking loop", account.ID)
+			break
+		}
+		seenIDs[account.ID] = struct{}{}
+		cfAccounts = append(cfAccounts, account)
+	}
+	return cfAccounts
 }
 
 func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
-
 	request := graphql.NewRequest(`
 query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	viewer {
@@ -332,6 +581,7 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 				dimensions {
 				  action
 				  source
+				  ruleId
 				  clientRequestHTTPHost
 				  clientCountryName
 				}
@@ -343,8 +593,13 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 					clientCountryName
 					clientRequestHTTPHost
 				}
+				quantiles {
+					originResponseDurationMsP50
+					originResponseDurationMsP95
+					originResponseDurationMsP99
+				}
 			}
-			httpRequestsEdgeCountryHost: httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime }) {
+			httpRequestsEdgeCountryHost: httpRequestsAdaptiveGroups(limit: $limit, filter: { datetime_geq: $mintime, datetime_lt: $maxtime, requestSource_in: ["eyeball"] }) {
 				count
 				dimensions {
 					edgeResponseStatus
@@ -365,23 +620,22 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	}
 }
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
-	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
-	}
-	request.Var("limit", 9999)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
 	request.Var("maxtime", now)
 	request.Var("mintime", now1mAgo)
 	request.Var("zoneIDs", zoneIDs)
 
-	ctx := context.Background()
-	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
 
 	var resp cloudflareResponse
-	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("failed to fetch zone totals, err:%v", err)
 		return nil, err
 	}
 
@@ -389,11 +643,6 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 }
 
 func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
-
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -421,22 +670,22 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 			}
 		}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
-	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
-	}
-	request.Var("limit", 9999)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
 	request.Var("maxtime", now)
 	request.Var("mintime", now1mAgo)
 	request.Var("zoneIDs", zoneIDs)
 
-	ctx := context.Background()
-	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
 	var resp cloudflareResponseColo
-	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("failed to fetch colocation totals, err:%v", err)
 		return nil, err
 	}
 
@@ -444,11 +693,6 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 }
 
 func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
-
 	request := graphql.NewRequest(`
 	query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -457,7 +701,6 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 					dimensions {
 						scriptName
 						status
-						datetime
 					}
 
 					sum {
@@ -481,22 +724,22 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 		}
 	}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
-	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
-	}
-	request.Var("limit", 9999)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
 	request.Var("maxtime", now)
 	request.Var("mintime", now1mAgo)
 	request.Var("accountID", accountID)
 
-	ctx := context.Background()
-	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
 	var resp cloudflareResponseAccts
-	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching worker totals, err:%v", err)
 		return nil, err
 	}
 
@@ -504,11 +747,6 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 }
 
 func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
-	now := time.Now().Add(-time.Duration(cfgScrapeDelay) * time.Second).UTC()
-	s := 60 * time.Second
-	now = now.Truncate(s)
-	now1mAgo := now.Add(-60 * time.Second)
-
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -558,38 +796,286 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 		}
 	}
 `)
-	if len(cfgCfAPIToken) > 0 {
-		request.Header.Set("Authorization", "Bearer "+cfgCfAPIToken)
-	} else {
-		request.Header.Set("X-AUTH-EMAIL", cfgCfAPIEmail)
-		request.Header.Set("X-AUTH-KEY", cfgCfAPIKey)
-	}
-	request.Var("limit", 9999)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
 	request.Var("maxtime", now)
 	request.Var("mintime", now1mAgo)
 	request.Var("zoneIDs", zoneIDs)
 
-	ctx := context.Background()
-	graphqlClient := graphql.NewClient(cfGraphQLEndpoint)
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
 	var resp cloudflareResponseLb
-	if err := graphqlClient.Run(ctx, request, &resp); err != nil {
-		log.Error(err)
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching load balancer totals, err:%v", err)
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func findZoneName(zones []cloudflare.Zone, ID string) string {
+func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, error) {
+	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
+		viewer {
+		  accounts(filter: {accountTag : $accountID }) {
+			logpushHealthAdaptiveGroups(
+			  filter: {
+				datetime_geq: $mintime
+				datetime_lt: $maxtime
+				status_neq: 200
+			  }
+			  limit: $limit
+			) {
+			  count
+			  dimensions {
+				jobId
+				status
+				destinationType
+				datetime
+				final
+			  }
+			}
+		  }
+		}
+	  }`)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("accountID", accountID)
+	request.Var("limit", gqlQueryLimit)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	var resp cloudflareResponseLogpushAccount
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching logpush account totals, err:%v", err)
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) {
+	request := graphql.NewRequest(`query($zoneIDs: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
+		viewer {
+			zones(filter: {zoneTag_in : $zoneIDs }) {
+			logpushHealthAdaptiveGroups(
+			  filter: {
+				datetime_geq: $mintime
+				datetime_lt: $maxtime
+				status_neq: 200
+			  }
+			  limit: $limit
+			) {
+			  count
+			  dimensions {
+				jobId
+				status
+				destinationType
+				datetime
+				final
+			  }
+			}
+		  }
+		}
+	  }`)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("zoneIDs", zoneIDs)
+	request.Var("limit", gqlQueryLimit)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	var resp cloudflareResponseLogpushZone
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching logpush zone totals, err:%v", err)
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func fetchEdgeErrorsByPath(zoneIDs []string) (*cloudflareResponseEdgeErrorsByPath, error) {
+	request := graphql.NewRequest(`
+	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
+		viewer {
+			zones(filter: { zoneTag_in: $zoneIDs }) {
+				zoneTag
+				httpRequestsAdaptiveGroups(
+					limit: $limit
+					filter: {
+						datetime_geq: $mintime
+						datetime_lt: $maxtime
+						edgeResponseStatus_geq: 400
+					}
+				) {
+					count
+					dimensions {
+						edgeResponseStatus
+						clientRequestHTTPHost
+						clientRequestPath
+					}
+				}
+			}
+		}
+	}
+`)
+
+	now, now1mAgo := GetTimeRange()
+	request.Var("limit", gqlQueryLimit)
+	request.Var("maxtime", now)
+	request.Var("mintime", now1mAgo)
+	request.Var("zoneIDs", zoneIDs)
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	var resp cloudflareResponseEdgeErrorsByPath
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("failed to fetch edge errors by path, err:%v", err)
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
+	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $date: String!) {
+		viewer {
+		  accounts(filter: {accountTag : $accountID }) {
+			r2StorageAdaptiveGroups(
+			  filter: {
+				date: $date
+			  },
+			  limit: $limit
+			) {
+			  dimensions {
+          		bucketName
+			  }
+        	  max {
+				metadataSize
+          		payloadSize
+				objectCount
+			  }
+      		}
+			r2OperationsAdaptiveGroups(filter: { date: $date }, limit: $limit) {
+				dimensions {
+					actionType
+					bucketName
+				}
+				sum {
+					requests
+				}
+			}
+			}
+		  }
+	  }`)
+
+	now, _ := GetTimeRange()
+	request.Var("accountID", accountID)
+	request.Var("limit", gqlQueryLimit)
+	request.Var("date", now.Format("2006-01-02"))
+
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+
+	var resp cloudflareResponseR2Account
+	if err := gql.Client.Run(ctx, request, &resp); err != nil {
+		log.Errorf("error fetching R2 account: %v", err)
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelListResponse {
+	var cfTunnels []cfzero_trust.TunnelListResponse
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page := cfclient.ZeroTrust.Tunnels.ListAutoPaging(ctx,
+		cfzero_trust.TunnelListParams{
+			AccountID: cf.F(account.ID),
+			PerPage:   cf.F(float64(apiPerPageLimit)),
+			IsDeleted: cf.F(false),
+		})
+	if page.Err() != nil {
+		log.Errorf("error fetching tunnels, err:%v", page.Err())
+		return nil
+	}
+
+	seenIDs := make(map[string]struct{})
+	for page.Next() {
+		if page.Err() != nil {
+			log.Errorf("error during paging tunnels: %v", page.Err())
+			break
+		}
+		tunnel := page.Current()
+		if _, exists := seenIDs[tunnel.ID]; exists {
+			log.Errorf("fetchCloudflareTunnels: duplicate tunnel ID detected (%s), breaking loop", tunnel.ID)
+			break
+		}
+		seenIDs[tunnel.ID] = struct{}{}
+		cfTunnels = append(cfTunnels, tunnel)
+	}
+
+	return cfTunnels
+}
+
+func fetchCloudflareTunnelConnectors(account cfaccounts.Account, tunnelID string) []cfzero_trust.Client {
+	var cfClients []cfzero_trust.Client
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	page := cfclient.ZeroTrust.Tunnels.Connections.GetAutoPaging(ctx,
+		tunnelID,
+		cfzero_trust.TunnelConnectionGetParams{
+			AccountID: cf.F(account.ID),
+		})
+	if page.Err() != nil {
+		log.Errorf("error fetching tunnel connections, err:%v", page.Err())
+		return nil
+	}
+
+	for page.Next() {
+		if page.Err() != nil {
+			log.Errorf("error during paging tunnel connections: %v", page.Err())
+			break
+		}
+		client := page.Current()
+		cfClients = append(cfClients, client)
+	}
+
+	return cfClients
+}
+
+func findZoneAccountName(zones []cfzones.Zone, ID string) (string, string) {
 	for _, z := range zones {
 		if z.ID == ID {
-			return z.Name
+			return z.Name, strings.ToLower(strings.ReplaceAll(z.Account.Name, " ", "-"))
 		}
 	}
 
-	return ""
+	return "", ""
 }
 
-func extractZoneIDs(zones []cloudflare.Zone) []string {
+func extractZoneIDs(zones []cfzones.Zone) []string {
 	var IDs []string
 
 	for _, z := range zones {
@@ -599,9 +1085,20 @@ func extractZoneIDs(zones []cloudflare.Zone) []string {
 	return IDs
 }
 
-func filterNonFreePlanZones(zones []cloudflare.Zone) (filteredZones []cloudflare.Zone) {
+func filterNonFreePlanZones(zones []cfzones.Zone) (filteredZones []cfzones.Zone) {
+	var zoneIDs []string
+
 	for _, z := range zones {
-		if z.Plan.ZonePlanCommon.ID != "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee" {
+		extraFields, err := jsonStringToMap(z.JSON.ExtraFields["plan"].Raw())
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		if extraFields["id"] == freePlanID {
+			continue
+		}
+		if !contains(zoneIDs, z.ID) {
+			zoneIDs = append(zoneIDs, z.ID)
 			filteredZones = append(filteredZones, z)
 		}
 	}

@@ -28,6 +28,7 @@ The following table lists the configurable parameters of the Cloudflare-exporter
 | `fullnameOverride` |  | `""` |
 | `podAnnotations` |  | `{}` |
 | `podSecurityContext` |  | `{}` |
+| `priorityClassName` |  | `""` |
 | `securityContext` |  | `{}` |
 | `service.type` |  | `"ClusterIP"` |
 | `service.port` |  | `8080` |
