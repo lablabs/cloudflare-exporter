@@ -76,7 +76,7 @@ jobs:
           echo "image-ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
 
       - name: Attest
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         id: attest
         with:
           subject-name: ghcr.io/${{ github.repository }}
