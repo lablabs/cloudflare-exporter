@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
 	cfload_balancers "github.com/cloudflare/cloudflare-go/v4/load_balancers"
-	cfpagination "github.com/cloudflare/cloudflare-go/v4/packages/pagination"
 	cfrulesets "github.com/cloudflare/cloudflare-go/v4/rulesets"
 	cfzero_trust "github.com/cloudflare/cloudflare-go/v4/zero_trust"
 	cfzones "github.com/cloudflare/cloudflare-go/v4/zones"
@@ -20,6 +20,12 @@ const (
 	freePlanID      = "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	apiPerPageLimit = 999
 )
+
+// canceled reports whether err stems from context cancellation (e.g. graceful
+// shutdown), which we expect and therefore do not log as an error.
+func canceled(err error) bool {
+	return errors.Is(err, context.Canceled)
+}
 
 type cloudflareResponse struct {
 	Viewer struct {
@@ -348,23 +354,28 @@ type lbResp struct {
 	ZoneTag string `json:"zoneTag"`
 }
 
-func fetchLoadblancerPools(account cfaccounts.Account) []cfload_balancers.Pool {
-	var cfPools []cfload_balancers.Pool
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+func fetchLoadblancerPools(ctx context.Context, account cfaccounts.Account) []cfload_balancers.Pool {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
+
+	var cfPools []cfload_balancers.Pool
 	page := cfclient.LoadBalancers.Pools.ListAutoPaging(ctx,
 		cfload_balancers.PoolListParams{
 			AccountID: cf.F(account.ID),
 		})
 	if page.Err() != nil {
-		log.Errorf("error fetching loadbalancer pools, err:%v", page.Err())
+		if !canceled(page.Err()) {
+			log.Errorf("error fetching loadbalancer pools, err:%v", page.Err())
+		}
 		return nil
 	}
 
 	seenIDs := make(map[string]struct{})
 	for page.Next() {
 		if page.Err() != nil {
-			log.Errorf("error during paging pools: %v", page.Err())
+			if !canceled(page.Err()) {
+				log.Errorf("error during paging pools: %v", page.Err())
+			}
 			break
 		}
 		pool := page.Current()
@@ -379,10 +390,11 @@ func fetchLoadblancerPools(account cfaccounts.Account) []cfload_balancers.Pool {
 	return cfPools
 }
 
-func getAccountZoneList(accountID string) ([]cfzones.Zone, error) {
-	var zoneList []cfzones.Zone
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+func getAccountZoneList(ctx context.Context, accountID string) ([]cfzones.Zone, error) {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
+
+	var zoneList []cfzones.Zone
 	page := cfclient.Zones.ListAutoPaging(ctx, cfzones.ZoneListParams{
 		Account: cf.F(cfzones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 		PerPage: cf.F(float64(apiPerPageLimit)),
@@ -394,7 +406,9 @@ func getAccountZoneList(accountID string) ([]cfzones.Zone, error) {
 	seenIDs := make(map[string]struct{})
 	for page.Next() {
 		if page.Err() != nil {
-			log.Errorf("error during paging zoneList: %v", page.Err())
+			if !canceled(page.Err()) {
+				log.Errorf("error during paging zoneList: %v", page.Err())
+			}
 			break
 		}
 		zone := page.Current()
@@ -409,14 +423,16 @@ func getAccountZoneList(accountID string) ([]cfzones.Zone, error) {
 	return zoneList, nil
 }
 
-func fetchZones(accounts []cfaccounts.Account) []cfzones.Zone {
+func fetchZones(ctx context.Context, accounts []cfaccounts.Account) []cfzones.Zone {
 	var zones []cfzones.Zone
 
 	for _, account := range accounts {
-		z, err := getAccountZoneList(account.ID)
+		z, err := getAccountZoneList(ctx, account.ID)
 
 		if err != nil {
-			log.Errorf("error fetching zones: %v", err)
+			if !canceled(err) {
+				log.Errorf("error fetching zones: %v", err)
+			}
 			continue
 		}
 		zones = append(zones, z...)
@@ -424,13 +440,12 @@ func fetchZones(accounts []cfaccounts.Account) []cfzones.Zone {
 	return zones
 }
 
-func getRuleSetsList(params cfrulesets.RulesetListParams) ([]cfrulesets.RulesetListResponse, error) {
-	var ruleSetList []cfrulesets.RulesetListResponse
-	var page *cfpagination.CursorPagination[cfrulesets.RulesetListResponse]
-	var err error
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+func getRuleSetsList(ctx context.Context, params cfrulesets.RulesetListParams) ([]cfrulesets.RulesetListResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
-	page, err = cfclient.Rulesets.List(ctx, params)
+
+	var ruleSetList []cfrulesets.RulesetListResponse
+	page, err := cfclient.Rulesets.List(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -439,9 +454,7 @@ func getRuleSetsList(params cfrulesets.RulesetListParams) ([]cfrulesets.RulesetL
 
 	for page.ResultInfo.Cursor != "" {
 		params.Cursor = cf.F(page.ResultInfo.Cursor)
-		ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 		page, err = cfclient.Rulesets.List(ctx, params)
-		cancel()
 		if err != nil {
 			return nil, err
 		}
@@ -451,12 +464,17 @@ func getRuleSetsList(params cfrulesets.RulesetListParams) ([]cfrulesets.RulesetL
 	return ruleSetList, nil
 }
 
-func fetchFirewallRules(zoneID string) map[string]string {
-	listOfRulesets, err := getRuleSetsList(cfrulesets.RulesetListParams{
+func fetchFirewallRules(ctx context.Context, zoneID string) map[string]string {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
+	defer cancel()
+
+	listOfRulesets, err := getRuleSetsList(ctx, cfrulesets.RulesetListParams{
 		ZoneID: cf.F(zoneID),
 	})
 	if err != nil {
-		log.Errorf("error fetching firewall rules, ZoneID:%s, Err:%v", zoneID, err)
+		if !canceled(err) {
+			log.Errorf("error fetching firewall rules, ZoneID:%s, Err:%v", zoneID, err)
+		}
 		return nil
 	}
 
@@ -464,32 +482,30 @@ func fetchFirewallRules(zoneID string) map[string]string {
 
 	for _, rulesetDesc := range listOfRulesets {
 		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallManaged {
-			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
 				ZoneID: cf.F(zoneID),
 			})
 			if err != nil {
-				log.Errorf("error fetching ruleset for managed firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
-				cancel()
+				if !canceled(err) {
+					log.Errorf("error fetching ruleset for managed firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
+				}
 				continue
 			}
-			cancel()
 			for _, rule := range ruleset.Rules {
 				firewallRulesMap[rule.ID] = rule.Description
 			}
 		}
 
 		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallCustom {
-			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
 				ZoneID: cf.F(zoneID),
 			})
 			if err != nil {
-				log.Errorf("error fetching ruleset for custom firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
-				cancel()
+				if !canceled(err) {
+					log.Errorf("error fetching ruleset for custom firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
+				}
 				continue
 			}
-			cancel()
 			for _, rule := range ruleset.Rules {
 				firewallRulesMap[rule.ID] = rule.Description
 			}
@@ -499,7 +515,10 @@ func fetchFirewallRules(zoneID string) map[string]string {
 	return firewallRulesMap
 }
 
-func fetchAccounts(targetAccountIDs []string) []cfaccounts.Account {
+func fetchAccounts(ctx context.Context, targetAccountIDs []string) []cfaccounts.Account {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
+	defer cancel()
+
 	var cfAccounts []cfaccounts.Account
 
 	if len(targetAccountIDs) > 0 {
@@ -510,14 +529,14 @@ func fetchAccounts(targetAccountIDs []string) []cfaccounts.Account {
 				continue
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 			account, err := cfclient.Accounts.Get(ctx, cfaccounts.AccountGetParams{
 				AccountID: cf.F(accountID),
 			})
-			cancel()
 
 			if err != nil {
-				log.Warnf("Account %s details unavailable, using ID only: %v", accountID, err)
+				if !canceled(err) {
+					log.Warnf("Account %s details unavailable, using ID only: %v", accountID, err)
+				}
 				cfAccounts = append(cfAccounts, cfaccounts.Account{
 					ID: accountID,
 				})
@@ -530,21 +549,23 @@ func fetchAccounts(targetAccountIDs []string) []cfaccounts.Account {
 	}
 
 	log.Info("Listing all accessible accounts (user-level token mode)")
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
-	defer cancel()
 	page := cfclient.Accounts.ListAutoPaging(ctx,
 		cfaccounts.AccountListParams{
 			PerPage: cf.F(float64(apiPerPageLimit)),
 		})
 	if page.Err() != nil {
-		log.Errorf("error fetching accounts:%v", page.Err())
+		if !canceled(page.Err()) {
+			log.Errorf("error fetching accounts:%v", page.Err())
+		}
 		return nil
 	}
 
 	seenIDs := make(map[string]struct{})
 	for page.Next() {
 		if page.Err() != nil {
-			log.Errorf("error during paging accounts: %v", page.Err())
+			if !canceled(page.Err()) {
+				log.Errorf("error during paging accounts: %v", page.Err())
+			}
 			break
 		}
 		account := page.Current()
@@ -558,7 +579,7 @@ func fetchAccounts(targetAccountIDs []string) []cfaccounts.Account {
 	return cfAccounts
 }
 
-func fetchZoneTotals(zoneIDs []string) (*cloudflareResponse, error) {
+func fetchZoneTotals(ctx context.Context, zoneIDs []string) (*cloudflareResponse, error) {
 	request := graphql.NewRequest(`
 query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	viewer {
@@ -671,19 +692,21 @@ query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponse
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("failed to fetch zone totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("failed to fetch zone totals, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
+func fetchColoTotals(ctx context.Context, zoneIDs []string) (*cloudflareResponseColo, error) {
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -721,19 +744,21 @@ func fetchColoTotals(zoneIDs []string) (*cloudflareResponseColo, error) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseColo
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("failed to fetch colocation totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("failed to fetch colocation totals, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
+func fetchWorkerTotals(ctx context.Context, accountID string) (*cloudflareResponseAccts, error) {
 	request := graphql.NewRequest(`
 	query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -775,19 +800,21 @@ func fetchWorkerTotals(accountID string) (*cloudflareResponseAccts, error) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseAccts
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("error fetching worker totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("error fetching worker totals, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchAccountHTTPDataTransfer(accountID string, from time.Time, to time.Time, requestSource string) (*cloudflareResponseAccountHTTPDataTransfer, error) {
+func fetchAccountHTTPDataTransfer(ctx context.Context, accountID string, from time.Time, to time.Time, requestSource string) (*cloudflareResponseAccountHTTPDataTransfer, error) {
 	request := graphql.NewRequest(`
 query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $requestSource: String!) {
 	viewer {
@@ -817,19 +844,21 @@ query ($accountID: String!, $mintime: Time!, $maxtime: Time!, $requestSource: St
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseAccountHTTPDataTransfer
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("failed to fetch account HTTP data transfer, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("failed to fetch account HTTP data transfer, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
+func fetchLoadBalancerTotals(ctx context.Context, zoneIDs []string) (*cloudflareResponseLb, error) {
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -889,18 +918,20 @@ func fetchLoadBalancerTotals(zoneIDs []string) (*cloudflareResponseLb, error) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseLb
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("error fetching load balancer totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("error fetching load balancer totals, err:%v", err)
+		}
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, error) {
+func fetchLogpushAccount(ctx context.Context, accountID string) (*cloudflareResponseLogpushAccount, error) {
 	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
 		viewer {
 		  accounts(filter: {accountTag : $accountID }) {
@@ -934,18 +965,21 @@ func fetchLogpushAccount(accountID string) (*cloudflareResponseLogpushAccount, e
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	var resp cloudflareResponseLogpushAccount
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
+	var resp cloudflareResponseLogpushAccount
+
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("error fetching logpush account totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("error fetching logpush account totals, err:%v", err)
+		}
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) {
+func fetchLogpushZone(ctx context.Context, zoneIDs []string) (*cloudflareResponseLogpushZone, error) {
 	request := graphql.NewRequest(`query($zoneIDs: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
 		viewer {
 			zones(filter: {zoneTag_in : $zoneIDs }) {
@@ -979,19 +1013,21 @@ func fetchLogpushZone(zoneIDs []string) (*cloudflareResponseLogpushZone, error) 
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseLogpushZone
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("error fetching logpush zone totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("error fetching logpush zone totals, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchEdgeErrorsByPath(zoneIDs []string) (*cloudflareResponseEdgeErrorsByPath, error) {
+func fetchEdgeErrorsByPath(ctx context.Context, zoneIDs []string) (*cloudflareResponseEdgeErrorsByPath, error) {
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -1026,19 +1062,21 @@ func fetchEdgeErrorsByPath(zoneIDs []string) (*cloudflareResponseEdgeErrorsByPat
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseEdgeErrorsByPath
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("failed to fetch edge errors by path, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("failed to fetch edge errors by path, err:%v", err)
+		}
 		return nil, err
 	}
 
 	return &resp, nil
 }
 
-func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
+func fetchR2Account(ctx context.Context, accountID string) (*cloudflareResponseR2Account, error) {
 	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $date: String!) {
 		viewer {
 		  accounts(filter: {accountTag : $accountID }) {
@@ -1078,21 +1116,24 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseR2Account
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("error fetching R2 account: %v", err)
+		if !canceled(err) {
+			log.Errorf("error fetching R2 account: %v", err)
+		}
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelListResponse {
-	var cfTunnels []cfzero_trust.TunnelListResponse
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+func fetchCloudflareTunnels(ctx context.Context, account cfaccounts.Account) []cfzero_trust.TunnelListResponse {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
+
+	var cfTunnels []cfzero_trust.TunnelListResponse
 	page := cfclient.ZeroTrust.Tunnels.ListAutoPaging(ctx,
 		cfzero_trust.TunnelListParams{
 			AccountID: cf.F(account.ID),
@@ -1100,14 +1141,18 @@ func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelLis
 			IsDeleted: cf.F(false),
 		})
 	if page.Err() != nil {
-		log.Errorf("error fetching tunnels, err:%v", page.Err())
+		if !canceled(page.Err()) {
+			log.Errorf("error fetching tunnels, err:%v", page.Err())
+		}
 		return nil
 	}
 
 	seenIDs := make(map[string]struct{})
 	for page.Next() {
 		if page.Err() != nil {
-			log.Errorf("error during paging tunnels: %v", page.Err())
+			if !canceled(page.Err()) {
+				log.Errorf("error during paging tunnels: %v", page.Err())
+			}
 			break
 		}
 		tunnel := page.Current()
@@ -1122,23 +1167,28 @@ func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelLis
 	return cfTunnels
 }
 
-func fetchCloudflareTunnelConnectors(account cfaccounts.Account, tunnelID string) []cfzero_trust.Client {
-	var cfClients []cfzero_trust.Client
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+func fetchCloudflareTunnelConnectors(ctx context.Context, account cfaccounts.Account, tunnelID string) []cfzero_trust.Client {
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
+
+	var cfClients []cfzero_trust.Client
 	page := cfclient.ZeroTrust.Tunnels.Connections.GetAutoPaging(ctx,
 		tunnelID,
 		cfzero_trust.TunnelConnectionGetParams{
 			AccountID: cf.F(account.ID),
 		})
 	if page.Err() != nil {
-		log.Errorf("error fetching tunnel connections, err:%v", page.Err())
+		if !canceled(page.Err()) {
+			log.Errorf("error fetching tunnel connections, err:%v", page.Err())
+		}
 		return nil
 	}
 
 	for page.Next() {
 		if page.Err() != nil {
-			log.Errorf("error during paging tunnel connections: %v", page.Err())
+			if !canceled(page.Err()) {
+				log.Errorf("error during paging tunnel connections: %v", page.Err())
+			}
 			break
 		}
 		client := page.Current()
@@ -1188,7 +1238,7 @@ func filterNonFreePlanZones(zones []cfzones.Zone) (filteredZones []cfzones.Zone)
 	return
 }
 
-func fetchASNTotals(zoneIDs []string) (*cloudflareResponseASN, error) {
+func fetchASNTotals(ctx context.Context, zoneIDs []string) (*cloudflareResponseASN, error) {
 	request := graphql.NewRequest(`
 	query ($zoneIDs: [String!], $mintime: Time!, $maxtime: Time!, $limit: Int!) {
 		viewer {
@@ -1227,12 +1277,14 @@ func fetchASNTotals(zoneIDs []string) (*cloudflareResponseASN, error) {
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	ctx, cancel := context.WithTimeout(ctx, cftimeout)
 	defer cancel()
 
 	var resp cloudflareResponseASN
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
-		log.Errorf("failed to fetch ASN totals, err:%v", err)
+		if !canceled(err) {
+			log.Errorf("failed to fetch ASN totals, err:%v", err)
+		}
 		return nil, err
 	}
 
