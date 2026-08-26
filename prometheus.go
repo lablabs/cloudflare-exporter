@@ -736,11 +736,6 @@ func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Colocation metrics are not available in non-enterprise zones
-	if viper.GetBool("free_tier") {
-		return
-	}
-
 	zoneIDs := extractZoneIDs(zones)
 	if len(zoneIDs) == 0 {
 		return
@@ -765,8 +760,8 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 func fetchZoneAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// None of the below referenced metrics are available in the free tier
 	if viper.GetBool("free_tier") {
+		fetchZoneAnalyticsFree(zones)
 		return
 	}
 
@@ -980,10 +975,6 @@ func fetchEdgeErrorsByPathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	if !viper.GetBool("enable_edge_errors_by_path") {
-		return
-	}
-
-	if viper.GetBool("free_tier") {
 		return
 	}
 

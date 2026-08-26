@@ -71,7 +71,7 @@ The exporter can be configured using env variables or command flags.
 | `CF_ZONES` |  (Optional) cloudflare zones to export, comma delimited list of zone ids. If not set, all zones from account are exported |
 | `CF_EXCLUDE_ZONES` |  (Optional) cloudflare zones to exclude, comma delimited list of zone ids. If not set, no zones from account are excluded |
 | `CF_TIMEOUT` | Set cloudflare request timeout. Default 10 seconds |
-| `FREE_TIER` | (Optional) scrape only metrics included in free plan. Accepts `true` or `false`, default `false`. |
+| `FREE_TIER` | (Optional) use the Free-plan-compatible collection path for zone analytics (built on `httpRequestsAdaptiveGroups` instead of the Enterprise-only `httpRequests1mGroups`). Accepts `true` or `false`, default `false`. See [Metrics availability by plan](#metrics-availability-by-plan). |
 | `LISTEN` |  listen on addr:port (default `:8080`), omit addr to listen on all interfaces |
 | `METRICS_PATH` |  path for metrics, default `/metrics` |
 | `SCRAPE_DELAY` | scrape delay in seconds, default `300` |
@@ -94,7 +94,7 @@ Corresponding flags:
   -cf_zones="": cloudflare zones to export, comma delimited list
   -cf_exclude_zones="": cloudflare zones to exclude, comma delimited list
   -cf_timeout="10s": cloudflare request timeout, default 10 seconds
-  -free_tier=false: scrape only metrics included in free plan, default false
+  -free_tier=false: use the free-plan-compatible collection path for zone analytics, default false
   -listen=":8080": listen on addr:port ( default :8080), omit addr to listen on all interfaces
   -metrics_path="/metrics": path for metrics, default /metrics
   -scrape_delay=300: scrape delay in seconds, defaults to 300
@@ -116,6 +116,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_worker_duration Duration quantiles by script name (GB*s)
 # HELP cloudflare_worker_errors_count Number of errors by script name
 # HELP cloudflare_worker_requests_count Number of requests sent to worker by script name
+# HELP cloudflare_zone_bandwidth_asn Bandwidth per ASN (Autonomous System Number) in bytes
 # HELP cloudflare_zone_bandwidth_cached Cached bandwidth per zone in bytes
 # HELP cloudflare_zone_bandwidth_content_type Bandwidth per zone per content type
 # HELP cloudflare_zone_bandwidth_country Bandwidth per country per zone
@@ -125,6 +126,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_zone_colocation_visits Total visits per colocation
 # HELP cloudflare_zone_colocation_requests_total Total requests per colocation
 # HELP cloudflare_zone_pageviews_total Pageviews per zone
+# HELP cloudflare_zone_requests_asn Number of requests per ASN (Autonomous System Number)
 # HELP cloudflare_zone_requests_cached Number of cached requests for zone
 # HELP cloudflare_zone_requests_content_type Number of request for zone per content type
 # HELP cloudflare_zone_requests_country Number of request for zone per country
@@ -192,6 +194,16 @@ Example alert:
 ```promql
 cloudflare_account_http_data_transfer_projected_month_bytes > 100 * 1024 * 1024 * 1024 * 1024
 ```
+
+## Metrics availability by plan
+
+`FREE_TIER=true` switches zone analytics to `httpRequestsAdaptiveGroups`, the only HTTP analytics dataset available on Free plans (`httpRequests1mGroups`, used for the paid path, is Enterprise-only). Not every field in that dataset is Free-plan accessible either, so a few metrics stay disabled either way.
+
+**Available with `FREE_TIER=true`**: `cloudflare_zone_requests_*` and `cloudflare_zone_bandwidth_*` (totals, status, country, cached, ssl_encrypted), `cloudflare_zone_colocation_*`, and `cloudflare_zone_edge_errors_by_path` (still opt-in via `ENABLE_EDGE_ERRORS_BY_PATH`).
+
+**Not available on Free**: content-type and ASN breakdowns (`*_content_type`, `*_asn`), uniques/pageviews/browser-map/threats (require `httpRequests1mGroups`), firewall events, health checks, and origin-status-by-country-host.
+
+**Out of scope regardless of the flag**: Load Balancing (`cloudflare_zone_pool_*`) and Logpush (`cloudflare_logpush_failed_jobs_*`) metrics — separate paid products, not just gated datasets.
 
 ## Helm chart repository
 
