@@ -463,33 +463,17 @@ func fetchFirewallRules(zoneID string) map[string]string {
 	firewallRulesMap := make(map[string]string)
 
 	for _, rulesetDesc := range listOfRulesets {
-		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallManaged {
+		switch rulesetDesc.Phase {
+		case cfrulesets.PhaseHTTPRequestFirewallManaged,
+			cfrulesets.PhaseHTTPRequestFirewallCustom,
+			cfrulesets.PhaseHTTPRatelimit:
 			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
-			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
-				ZoneID: cf.F(zoneID),
-			})
+			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{ZoneID: cf.F(zoneID)})
+			cancel()
 			if err != nil {
-				log.Errorf("error fetching ruleset for managed firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
-				cancel()
+				log.Errorf("error fetching ruleset, ZoneID:%s, RulesetID:%s, Phase:%s, Err:%v", zoneID, rulesetDesc.ID, rulesetDesc.Phase, err)
 				continue
 			}
-			cancel()
-			for _, rule := range ruleset.Rules {
-				firewallRulesMap[rule.ID] = rule.Description
-			}
-		}
-
-		if rulesetDesc.Phase == cfrulesets.PhaseHTTPRequestFirewallCustom {
-			ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
-			ruleset, err := cfclient.Rulesets.Get(ctx, rulesetDesc.ID, cfrulesets.RulesetGetParams{
-				ZoneID: cf.F(zoneID),
-			})
-			if err != nil {
-				log.Errorf("error fetching ruleset for custom firewall rules, ZoneID:%s, RulesetID:%s, Err:%v", zoneID, rulesetDesc.ID, err)
-				cancel()
-				continue
-			}
-			cancel()
 			for _, rule := range ruleset.Rules {
 				firewallRulesMap[rule.ID] = rule.Description
 			}
