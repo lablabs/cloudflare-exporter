@@ -10,7 +10,7 @@ import (
 )
 
 // Regression: cloudflare_r2_storage_bytes could be registered but was missing
-// from buildAllMetricsSet, so denylisting it aborted startup.
+// from the known-metrics set, so denylisting it aborted startup.
 func TestBuildFilteredMetricsSetAcceptsR2StorageBytes(t *testing.T) {
 	if _, err := buildFilteredMetricsSet([]string{r2StorageMetricName.String()}); err != nil {
 		t.Errorf("buildFilteredMetricsSet(%q): %v", r2StorageMetricName, err)
@@ -24,7 +24,10 @@ func TestBuildFilteredMetricsSetAcceptsR2StorageBytes(t *testing.T) {
 // API panics. Denying every metric a fetcher feeds must make it return first.
 func TestDeniedFetchersSkipAPICalls(t *testing.T) {
 	orig := deniedMetrics
-	deniedMetrics = buildAllMetricsSet()
+	deniedMetrics = MetricsSet{}
+	for mn := range allMetrics {
+		deniedMetrics.Add(mn)
+	}
 	t.Cleanup(func() { deniedMetrics = orig })
 
 	// These two fetchers are also behind feature flags that default to off, so

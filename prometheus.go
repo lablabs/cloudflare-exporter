@@ -393,67 +393,68 @@ var (
 	}, []string{"account"})
 )
 
-func buildAllMetricsSet() MetricsSet {
-	allMetricsSet := MetricsSet{}
-	allMetricsSet.Add(zoneRequestTotalMetricName)
-	allMetricsSet.Add(zoneRequestCachedMetricName)
-	allMetricsSet.Add(zoneRequestSSLEncryptedMetricName)
-	allMetricsSet.Add(zoneRequestContentTypeMetricName)
-	allMetricsSet.Add(zoneRequestCountryMetricName)
-	allMetricsSet.Add(zoneRequestHTTPStatusMetricName)
-	allMetricsSet.Add(zoneRequestBrowserMapMetricName)
-	allMetricsSet.Add(zoneRequestOriginStatusCountryHostMetricName)
-	allMetricsSet.Add(zoneRequestOriginStatusCountryHostP50MetricName)
-	allMetricsSet.Add(zoneRequestOriginStatusCountryHostP95MetricName)
-	allMetricsSet.Add(zoneRequestOriginStatusCountryHostP99MetricName)
-	allMetricsSet.Add(zoneRequestStatusCountryHostMetricName)
-	allMetricsSet.Add(zoneBandwidthTotalMetricName)
-	allMetricsSet.Add(zoneBandwidthCachedMetricName)
-	allMetricsSet.Add(zoneBandwidthSSLEncryptedMetricName)
-	allMetricsSet.Add(zoneBandwidthContentTypeMetricName)
-	allMetricsSet.Add(zoneBandwidthCountryMetricName)
-	allMetricsSet.Add(zoneThreatsTotalMetricName)
-	allMetricsSet.Add(zoneThreatsCountryMetricName)
-	allMetricsSet.Add(zoneThreatsTypeMetricName)
-	allMetricsSet.Add(zonePageviewsTotalMetricName)
-	allMetricsSet.Add(zoneUniquesTotalMetricName)
-	allMetricsSet.Add(zoneColocationVisitsMetricName)
-	allMetricsSet.Add(zoneColocationEdgeResponseBytesMetricName)
-	allMetricsSet.Add(zoneColocationRequestsTotalMetricName)
-	allMetricsSet.Add(zoneFirewallEventsCountMetricName)
-	allMetricsSet.Add(zoneHealthCheckEventsOriginCountMetricName)
-	allMetricsSet.Add(workerRequestsMetricName)
-	allMetricsSet.Add(workerErrorsMetricName)
-	allMetricsSet.Add(workerCPUTimeMetricName)
-	allMetricsSet.Add(workerDurationMetricName)
-	allMetricsSet.Add(poolHealthStatusMetricName)
-	allMetricsSet.Add(poolOriginHealthStatusMetricName)
-	allMetricsSet.Add(poolRequestsTotalMetricName)
-	allMetricsSet.Add(logpushFailedJobsAccountMetricName)
-	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
-	allMetricsSet.Add(r2StorageTotalMetricName)
-	allMetricsSet.Add(r2StorageMetricName)
-	allMetricsSet.Add(r2OperationMetricName)
-	allMetricsSet.Add(tunnelInfoMetricName)
-	allMetricsSet.Add(tunnelHealthStatusMetricName)
-	allMetricsSet.Add(tunnelConnectorInfoMetricName)
-	allMetricsSet.Add(tunnelConnectorActiveConnectionsMetricName)
-	allMetricsSet.Add(zoneRequestASNMetricName)
-	allMetricsSet.Add(zoneBandwidthASNMetricName)
-	allMetricsSet.Add(zoneEdgeErrorsByPathMetricName)
-	allMetricsSet.Add(accountHTTPDataTransferMonthToDateMetricName)
-	allMetricsSet.Add(accountHTTPDataTransferProjectedMonthMetricName)
-	allMetricsSet.Add(accountHTTPDataTransferMonthElapsedMetricName)
-	allMetricsSet.Add(accountHTTPDataTransferMonthTotalMetricName)
-	return allMetricsSet
+// allMetrics maps every exported metric name to its collector. Single source
+// of truth: METRICS_DENYLIST is validated against these keys and
+// mustRegisterMetrics registers these values, so a metric cannot be
+// registered without also being denylistable.
+var allMetrics = map[MetricName]prometheus.Collector{
+	zoneRequestTotalMetricName:                      zoneRequestTotal,
+	zoneRequestCachedMetricName:                     zoneRequestCached,
+	zoneRequestSSLEncryptedMetricName:               zoneRequestSSLEncrypted,
+	zoneRequestContentTypeMetricName:                zoneRequestContentType,
+	zoneRequestCountryMetricName:                    zoneRequestCountry,
+	zoneRequestHTTPStatusMetricName:                 zoneRequestHTTPStatus,
+	zoneRequestBrowserMapMetricName:                 zoneRequestBrowserMap,
+	zoneRequestOriginStatusCountryHostMetricName:    zoneRequestOriginStatusCountryHost,
+	zoneRequestOriginStatusCountryHostP50MetricName: zoneRequestOriginStatusCountryHostP50,
+	zoneRequestOriginStatusCountryHostP95MetricName: zoneRequestOriginStatusCountryHostP95,
+	zoneRequestOriginStatusCountryHostP99MetricName: zoneRequestOriginStatusCountryHostP99,
+	zoneRequestStatusCountryHostMetricName:          zoneRequestStatusCountryHost,
+	zoneBandwidthTotalMetricName:                    zoneBandwidthTotal,
+	zoneBandwidthCachedMetricName:                   zoneBandwidthCached,
+	zoneBandwidthSSLEncryptedMetricName:             zoneBandwidthSSLEncrypted,
+	zoneBandwidthContentTypeMetricName:              zoneBandwidthContentType,
+	zoneBandwidthCountryMetricName:                  zoneBandwidthCountry,
+	zoneThreatsTotalMetricName:                      zoneThreatsTotal,
+	zoneThreatsCountryMetricName:                    zoneThreatsCountry,
+	zoneThreatsTypeMetricName:                       zoneThreatsType,
+	zonePageviewsTotalMetricName:                    zonePageviewsTotal,
+	zoneUniquesTotalMetricName:                      zoneUniquesTotal,
+	zoneColocationVisitsMetricName:                  zoneColocationVisits,
+	zoneColocationEdgeResponseBytesMetricName:       zoneColocationEdgeResponseBytes,
+	zoneColocationRequestsTotalMetricName:           zoneColocationRequestsTotal,
+	zoneFirewallEventsCountMetricName:               zoneFirewallEventsCount,
+	zoneHealthCheckEventsOriginCountMetricName:      zoneHealthCheckEventsOriginCount,
+	workerRequestsMetricName:                        workerRequests,
+	workerErrorsMetricName:                          workerErrors,
+	workerCPUTimeMetricName:                         workerCPUTime,
+	workerDurationMetricName:                        workerDuration,
+	poolHealthStatusMetricName:                      poolHealthStatus,
+	poolOriginHealthStatusMetricName:                poolOriginHealthStatus,
+	poolRequestsTotalMetricName:                     poolRequestsTotal,
+	logpushFailedJobsAccountMetricName:              logpushFailedJobsAccount,
+	logpushFailedJobsZoneMetricName:                 logpushFailedJobsZone,
+	r2StorageTotalMetricName:                        r2StorageTotal,
+	r2StorageMetricName:                             r2Storage,
+	r2OperationMetricName:                           r2Operation,
+	tunnelInfoMetricName:                            tunnelInfo,
+	tunnelHealthStatusMetricName:                    tunnelHealthStatus,
+	tunnelConnectorInfoMetricName:                   tunnelConnectorInfo,
+	tunnelConnectorActiveConnectionsMetricName:      tunnelConnectorActiveConnections,
+	zoneRequestASNMetricName:                        zoneRequestASN,
+	zoneBandwidthASNMetricName:                      zoneBandwidthASN,
+	zoneEdgeErrorsByPathMetricName:                  zoneEdgeErrorsByPath,
+	accountHTTPDataTransferMonthToDateMetricName:    accountHTTPDataTransferMonthToDate,
+	accountHTTPDataTransferProjectedMonthMetricName: accountHTTPDataTransferProjectedMonth,
+	accountHTTPDataTransferMonthElapsedMetricName:   accountHTTPDataTransferMonthElapsed,
+	accountHTTPDataTransferMonthTotalMetricName:     accountHTTPDataTransferMonthTotal,
 }
 
 func buildFilteredMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 	deniedMetricsSet := MetricsSet{}
-	allMetricsSet := buildAllMetricsSet()
 
 	for _, metric := range metricsDenylist {
-		if !allMetricsSet.Has(MetricName(metric)) {
+		if _, ok := allMetrics[MetricName(metric)]; !ok {
 			return nil, fmt.Errorf("metric %s doesn't exists", metric)
 		}
 		deniedMetricsSet.Add(MetricName(metric))
@@ -462,155 +463,10 @@ func buildFilteredMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 }
 
 func mustRegisterMetrics() {
-	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
-		prometheus.MustRegister(zoneRequestTotal)
-	}
-	if !deniedMetrics.Has(zoneRequestCachedMetricName) {
-		prometheus.MustRegister(zoneRequestCached)
-	}
-	if !deniedMetrics.Has(zoneRequestSSLEncryptedMetricName) {
-		prometheus.MustRegister(zoneRequestSSLEncrypted)
-	}
-	if !deniedMetrics.Has(zoneRequestContentTypeMetricName) {
-		prometheus.MustRegister(zoneRequestContentType)
-	}
-	if !deniedMetrics.Has(zoneRequestCountryMetricName) {
-		prometheus.MustRegister(zoneRequestCountry)
-	}
-	if !deniedMetrics.Has(zoneRequestHTTPStatusMetricName) {
-		prometheus.MustRegister(zoneRequestHTTPStatus)
-	}
-	if !deniedMetrics.Has(zoneRequestBrowserMapMetricName) {
-		prometheus.MustRegister(zoneRequestBrowserMap)
-	}
-	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostMetricName) {
-		prometheus.MustRegister(zoneRequestOriginStatusCountryHost)
-	}
-	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostP50MetricName) {
-		prometheus.MustRegister(zoneRequestOriginStatusCountryHostP50)
-	}
-	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostP95MetricName) {
-		prometheus.MustRegister(zoneRequestOriginStatusCountryHostP95)
-	}
-	if !deniedMetrics.Has(zoneRequestOriginStatusCountryHostP99MetricName) {
-		prometheus.MustRegister(zoneRequestOriginStatusCountryHostP99)
-	}
-	if !deniedMetrics.Has(zoneRequestStatusCountryHostMetricName) {
-		prometheus.MustRegister(zoneRequestStatusCountryHost)
-	}
-	if !deniedMetrics.Has(zoneBandwidthTotalMetricName) {
-		prometheus.MustRegister(zoneBandwidthTotal)
-	}
-	if !deniedMetrics.Has(zoneBandwidthCachedMetricName) {
-		prometheus.MustRegister(zoneBandwidthCached)
-	}
-	if !deniedMetrics.Has(zoneBandwidthSSLEncryptedMetricName) {
-		prometheus.MustRegister(zoneBandwidthSSLEncrypted)
-	}
-	if !deniedMetrics.Has(zoneBandwidthContentTypeMetricName) {
-		prometheus.MustRegister(zoneBandwidthContentType)
-	}
-	if !deniedMetrics.Has(zoneBandwidthCountryMetricName) {
-		prometheus.MustRegister(zoneBandwidthCountry)
-	}
-	if !deniedMetrics.Has(zoneThreatsTotalMetricName) {
-		prometheus.MustRegister(zoneThreatsTotal)
-	}
-	if !deniedMetrics.Has(zoneThreatsCountryMetricName) {
-		prometheus.MustRegister(zoneThreatsCountry)
-	}
-	if !deniedMetrics.Has(zoneThreatsTypeMetricName) {
-		prometheus.MustRegister(zoneThreatsType)
-	}
-	if !deniedMetrics.Has(zonePageviewsTotalMetricName) {
-		prometheus.MustRegister(zonePageviewsTotal)
-	}
-	if !deniedMetrics.Has(zoneUniquesTotalMetricName) {
-		prometheus.MustRegister(zoneUniquesTotal)
-	}
-	if !deniedMetrics.Has(zoneColocationVisitsMetricName) {
-		prometheus.MustRegister(zoneColocationVisits)
-	}
-	if !deniedMetrics.Has(zoneColocationEdgeResponseBytesMetricName) {
-		prometheus.MustRegister(zoneColocationEdgeResponseBytes)
-	}
-	if !deniedMetrics.Has(zoneColocationRequestsTotalMetricName) {
-		prometheus.MustRegister(zoneColocationRequestsTotal)
-	}
-	if !deniedMetrics.Has(zoneFirewallEventsCountMetricName) {
-		prometheus.MustRegister(zoneFirewallEventsCount)
-	}
-	if !deniedMetrics.Has(zoneHealthCheckEventsOriginCountMetricName) {
-		prometheus.MustRegister(zoneHealthCheckEventsOriginCount)
-	}
-	if !deniedMetrics.Has(workerRequestsMetricName) {
-		prometheus.MustRegister(workerRequests)
-	}
-	if !deniedMetrics.Has(workerErrorsMetricName) {
-		prometheus.MustRegister(workerErrors)
-	}
-	if !deniedMetrics.Has(workerCPUTimeMetricName) {
-		prometheus.MustRegister(workerCPUTime)
-	}
-	if !deniedMetrics.Has(workerDurationMetricName) {
-		prometheus.MustRegister(workerDuration)
-	}
-	if !deniedMetrics.Has(poolHealthStatusMetricName) {
-		prometheus.MustRegister(poolHealthStatus)
-	}
-	if !deniedMetrics.Has(poolOriginHealthStatusMetricName) {
-		prometheus.MustRegister(poolOriginHealthStatus)
-	}
-	if !deniedMetrics.Has(poolRequestsTotalMetricName) {
-		prometheus.MustRegister(poolRequestsTotal)
-	}
-	if !deniedMetrics.Has(logpushFailedJobsAccountMetricName) {
-		prometheus.MustRegister(logpushFailedJobsAccount)
-	}
-	if !deniedMetrics.Has(logpushFailedJobsZoneMetricName) {
-		prometheus.MustRegister(logpushFailedJobsZone)
-	}
-	if !deniedMetrics.Has(r2StorageTotalMetricName) {
-		prometheus.MustRegister(r2StorageTotal)
-	}
-	if !deniedMetrics.Has(r2StorageMetricName) {
-		prometheus.MustRegister(r2Storage)
-	}
-	if !deniedMetrics.Has(r2OperationMetricName) {
-		prometheus.MustRegister(r2Operation)
-	}
-	if !deniedMetrics.Has(tunnelInfoMetricName) {
-		prometheus.MustRegister(tunnelInfo)
-	}
-	if !deniedMetrics.Has(tunnelHealthStatusMetricName) {
-		prometheus.MustRegister(tunnelHealthStatus)
-	}
-	if !deniedMetrics.Has(tunnelConnectorInfoMetricName) {
-		prometheus.MustRegister(tunnelConnectorInfo)
-	}
-	if !deniedMetrics.Has(tunnelConnectorActiveConnectionsMetricName) {
-		prometheus.MustRegister(tunnelConnectorActiveConnections)
-	}
-	if !deniedMetrics.Has(zoneRequestASNMetricName) {
-		prometheus.MustRegister(zoneRequestASN)
-	}
-	if !deniedMetrics.Has(zoneBandwidthASNMetricName) {
-		prometheus.MustRegister(zoneBandwidthASN)
-	}
-	if !deniedMetrics.Has(zoneEdgeErrorsByPathMetricName) {
-		prometheus.MustRegister(zoneEdgeErrorsByPath)
-	}
-	if !deniedMetrics.Has(accountHTTPDataTransferMonthToDateMetricName) {
-		prometheus.MustRegister(accountHTTPDataTransferMonthToDate)
-	}
-	if !deniedMetrics.Has(accountHTTPDataTransferProjectedMonthMetricName) {
-		prometheus.MustRegister(accountHTTPDataTransferProjectedMonth)
-	}
-	if !deniedMetrics.Has(accountHTTPDataTransferMonthElapsedMetricName) {
-		prometheus.MustRegister(accountHTTPDataTransferMonthElapsed)
-	}
-	if !deniedMetrics.Has(accountHTTPDataTransferMonthTotalMetricName) {
-		prometheus.MustRegister(accountHTTPDataTransferMonthTotal)
+	for mn, c := range allMetrics {
+		if !deniedMetrics.Has(mn) {
+			prometheus.MustRegister(c)
+		}
 	}
 }
 
