@@ -8,6 +8,7 @@ import (
 
 	"github.com/biter777/countries"
 	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
+	cfzero_trust "github.com/cloudflare/cloudflare-go/v4/zero_trust"
 	cfzones "github.com/cloudflare/cloudflare-go/v4/zones"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
@@ -736,18 +737,25 @@ func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchLogpushZone(zoneIDs)
-
-	if err != nil {
-		log.Error("failed to fetch logpush analytics for zones: ", err)
-		return
+	// Keep the previous snapshot unless every zone batch succeeds.
+	var results []*cloudflareResponseLogpushZone
+	for start := 0; start < len(zoneIDs); start += cfgraphqlreqlimit {
+		end := min(start+cfgraphqlreqlimit, len(zoneIDs))
+		r, err := fetchLogpushZone(zoneIDs[start:end])
+		if err != nil {
+			log.Error("failed to fetch logpush analytics for zones: ", err)
+			return
+		}
+		results = append(results, r)
 	}
-
-	for _, zone := range r.Viewer.Zones {
-		for _, LogpushHealthAdaptiveGroup := range zone.LogpushHealthAdaptiveGroups {
-			logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
-				"job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
-				"final":  strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+	logpushFailedJobsZone.Reset()
+	for _, r := range results {
+		for _, zone := range r.Viewer.Zones {
+			for _, LogpushHealthAdaptiveGroup := range zone.LogpushHealthAdaptiveGroups {
+				logpushFailedJobsZone.With(prometheus.Labels{"destination": LogpushHealthAdaptiveGroup.Dimensions.DestinationType,
+					"job_id": strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.JobID),
+					"final":  strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
+			}
 		}
 	}
 }
@@ -772,9 +780,6 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	}
 	for _, z := range r.Viewer.Zones {
 		cg := z.ColoGroups
-		if len(cg) == 0 {
-			continue
-		}
 		name, account := findZoneAccountName(zones, z.ZoneTag)
 
 		// Clear stale series for this zone/account
@@ -1176,10 +1181,22 @@ func addAccountHTTPDataTransfer(r *cloudflareResponseAccountHTTPDataTransfer, ac
 }
 
 func addCloudflareTunnelStatus(account cfaccounts.Account) {
-	tunnels := fetchCloudflareTunnels(account)
-	// nil means the fetch failed; keep the last known series in that case
-	if tunnels == nil {
+	tunnels, err := fetchCloudflareTunnels(account)
+	if err != nil {
+		log.Errorf("failed to fetch tunnels: %v", err)
 		return
+	}
+
+	// Fetch all connectors before replacing this account's snapshot.
+	// A failed request must not erase the last known metrics.
+	connectors := make(map[string][]cfzero_trust.Client, len(tunnels))
+	for _, tunnel := range tunnels {
+		clients, err := fetchCloudflareTunnelConnectors(account, tunnel.ID)
+		if err != nil {
+			log.Errorf("failed to fetch connectors for tunnel %s: %v", tunnel.ID, err)
+			return
+		}
+		connectors[tunnel.ID] = clients
 	}
 
 	// Clear stale series for this account
@@ -1207,7 +1224,7 @@ func addCloudflareTunnelStatus(account cfaccounts.Account) {
 		// Each client/connector can open many connections to the Cloudflare edge,
 		// we opt to not expose metrics for each individual connection. We do expose
 		// an informational metric for each client/connector however.
-		clients := fetchCloudflareTunnelConnectors(account, t.ID)
+		clients := connectors[t.ID]
 		for _, c := range clients {
 			originIP := ""
 			if len(c.Conns) > 0 {
@@ -1281,10 +1298,6 @@ func fetchZoneASNAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 }
 
 func addASNGroups(z *zoneRespASN, name string, account string) {
-	if len(z.HTTPRequestsASNGroups) == 0 {
-		return
-	}
-
 	// Clear stale series for this zone/account
 	label := prometheus.Labels{"zone": name, "account": account}
 	zoneRequestASN.DeletePartialMatch(label)

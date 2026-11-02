@@ -117,10 +117,6 @@ func fetchMetrics() {
 	targetAccounts := getTargetAccounts()
 	accounts := fetchAccounts(targetAccounts)
 
-	// logpushFailedJobsZone has no zone/account labels, so it cannot be cleared
-	// per zone batch; reset it once per scrape cycle instead.
-	logpushFailedJobsZone.Reset()
-
 	for _, a := range accounts {
 		wg.Add(1)
 		go fetchWorkerAnalytics(a, &wg)
@@ -150,6 +146,9 @@ func fetchMetrics() {
 		filteredZones = filterNonFreePlanZones(filteredZones)
 	}
 
+	wg.Add(1)
+	go fetchLogpushAnalyticsForZone(filteredZones, &wg)
+
 	zoneCount := len(filteredZones)
 	if zoneCount > 0 && zoneCount <= cfgraphqlreqlimit {
 		wg.Add(1)
@@ -160,9 +159,6 @@ func fetchMetrics() {
 
 		wg.Add(1)
 		go fetchLoadBalancerAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
 
 		wg.Add(1)
 		go fetchZoneASNAnalytics(filteredZones, &wg)
@@ -183,9 +179,6 @@ func fetchMetrics() {
 
 			wg.Add(1)
 			go fetchLoadBalancerAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
 
 			wg.Add(1)
 			go fetchZoneASNAnalytics(filteredZones[s:e], &wg)
