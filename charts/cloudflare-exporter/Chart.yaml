@@ -1,7 +1,7 @@
 apiVersion: v2
 name: cloudflare-exporter
-version: 0.2.3
-appVersion: 0.0.16
+version: 0.4.0
+appVersion: 0.4.0
 home: https://github.com/lablabs/cloudflare-exporter
 description: A Helm chart for cloudflare exporter
 icon: https://www.cloudflare.com/img/logo-web-badges/cf-logo-on-white-bg.svg
@@ -18,4 +18,11 @@ engine: gotpl
 type: application
 annotations:
   artifacthub.io/changes: |
-    - Initial helm chart changelog
+    - kind: fixed
+      description: Use the Rulesets API instead of the retired Firewall Rules API (0.0.16 crashes with error 10020)
+    - kind: changed
+      description: Default image repository is now ghcr.io/lablabs/cloudflare-exporter, where CI publishes images
+    - kind: changed
+      description: "BREAKING: cloudflare_zone_* series hold the value for the last minute instead of a growing counter; use avg_over_time(x[5m]) / 60 instead of rate()"
+    - kind: changed
+      description: "BREAKING: zones are discovered through accounts; set CF_ACCOUNTS for tokens that cannot list accounts"
