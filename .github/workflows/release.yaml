@@ -8,6 +8,10 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -37,6 +41,29 @@ jobs:
           helm repo add incubator https://charts.helm.sh/incubator
 
       - name: Run chart-releaser
+        id: cr
         uses: helm/chart-releaser-action@v1.7.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Release tag
+        id: tag
+        if: contains(steps.cr.outputs.changed_charts, 'cloudflare-exporter')
+        run: |
+          VERSION=$(grep '^version:' charts/cloudflare-exporter/Chart.yaml | awk '{print $2}')
+          echo "tag=cloudflare-exporter-${VERSION}" >> "$GITHUB_OUTPUT"
+
+  # The tag chart-releaser pushes does not trigger docker-release.yaml, so
+  # publish the image for the new release from here.
+  images:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/docker-release.yaml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit
