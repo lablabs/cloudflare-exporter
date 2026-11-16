@@ -146,6 +146,9 @@ func fetchMetrics() {
 		filteredZones = filterNonFreePlanZones(filteredZones)
 	}
 
+	wg.Add(1)
+	go fetchLogpushAnalyticsForZone(filteredZones, &wg)
+
 	zoneCount := len(filteredZones)
 	if zoneCount > 0 && zoneCount <= cfgraphqlreqlimit {
 		wg.Add(1)
@@ -156,9 +159,6 @@ func fetchMetrics() {
 
 		wg.Add(1)
 		go fetchLoadBalancerAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
 
 		wg.Add(1)
 		go fetchZoneASNAnalytics(filteredZones, &wg)
@@ -179,9 +179,6 @@ func fetchMetrics() {
 
 			wg.Add(1)
 			go fetchLoadBalancerAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
 
 			wg.Add(1)
 			go fetchZoneASNAnalytics(filteredZones[s:e], &wg)

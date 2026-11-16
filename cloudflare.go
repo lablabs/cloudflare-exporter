@@ -1089,7 +1089,7 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 	return &resp, nil
 }
 
-func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelListResponse {
+func fetchCloudflareTunnels(account cfaccounts.Account) ([]cfzero_trust.TunnelListResponse, error) {
 	var cfTunnels []cfzero_trust.TunnelListResponse
 	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 	defer cancel()
@@ -1101,28 +1101,32 @@ func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelLis
 		})
 	if page.Err() != nil {
 		log.Errorf("error fetching tunnels, err:%v", page.Err())
-		return nil
+		return nil, page.Err()
 	}
 
 	seenIDs := make(map[string]struct{})
 	for page.Next() {
 		if page.Err() != nil {
 			log.Errorf("error during paging tunnels: %v", page.Err())
-			break
+			return nil, page.Err()
 		}
 		tunnel := page.Current()
 		if _, exists := seenIDs[tunnel.ID]; exists {
+			// The autopager wrapped around to the first page; the list is already complete.
 			log.Errorf("fetchCloudflareTunnels: duplicate tunnel ID detected (%s), breaking loop", tunnel.ID)
-			break
+			return cfTunnels, nil
 		}
 		seenIDs[tunnel.ID] = struct{}{}
 		cfTunnels = append(cfTunnels, tunnel)
 	}
 
-	return cfTunnels
+	if err := page.Err(); err != nil {
+		return nil, err
+	}
+	return cfTunnels, nil
 }
 
-func fetchCloudflareTunnelConnectors(account cfaccounts.Account, tunnelID string) []cfzero_trust.Client {
+func fetchCloudflareTunnelConnectors(account cfaccounts.Account, tunnelID string) ([]cfzero_trust.Client, error) {
 	var cfClients []cfzero_trust.Client
 	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
 	defer cancel()
@@ -1133,19 +1137,22 @@ func fetchCloudflareTunnelConnectors(account cfaccounts.Account, tunnelID string
 		})
 	if page.Err() != nil {
 		log.Errorf("error fetching tunnel connections, err:%v", page.Err())
-		return nil
+		return nil, page.Err()
 	}
 
 	for page.Next() {
 		if page.Err() != nil {
 			log.Errorf("error during paging tunnel connections: %v", page.Err())
-			break
+			return nil, page.Err()
 		}
 		client := page.Current()
 		cfClients = append(cfClients, client)
 	}
 
-	return cfClients
+	if err := page.Err(); err != nil {
+		return nil, err
+	}
+	return cfClients, nil
 }
 
 func findZoneAccountName(zones []cfzones.Zone, ID string) (string, string) {
