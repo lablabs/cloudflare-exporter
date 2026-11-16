@@ -83,6 +83,21 @@ func (ms MetricsSet) Add(mn MetricName) {
 	ms[mn] = struct{}{}
 }
 
+// HasAll reports whether every named metric is in the set. Called on
+// deniedMetrics to decide whether a fetch is worth doing at all.
+func (ms MetricsSet) HasAll(mns ...MetricName) bool {
+	for _, mn := range mns {
+		if !ms.Has(mn) {
+			return false
+		}
+	}
+	return true
+}
+
+// deniedMetrics is the METRICS_DENYLIST set, written once at startup before the
+// scrape loop starts and read-only afterwards.
+var deniedMetrics = MetricsSet{}
+
 var (
 	// Requests
 	zoneRequestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -417,6 +432,7 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(logpushFailedJobsAccountMetricName)
 	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
 	allMetricsSet.Add(r2StorageTotalMetricName)
+	allMetricsSet.Add(r2StorageMetricName)
 	allMetricsSet.Add(r2OperationMetricName)
 	allMetricsSet.Add(tunnelInfoMetricName)
 	allMetricsSet.Add(tunnelHealthStatusMetricName)
@@ -445,7 +461,7 @@ func buildFilteredMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 	return deniedMetricsSet, nil
 }
 
-func mustRegisterMetrics(deniedMetrics MetricsSet) {
+func mustRegisterMetrics() {
 	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
 		prometheus.MustRegister(zoneRequestTotal)
 	}
@@ -601,6 +617,10 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 func fetchLoadblancerPoolsHealth(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.Has(poolOriginHealthStatusMetricName) {
+		return
+	}
+
 	pools := fetchLoadblancerPools(account)
 	if pools == nil {
 		return
@@ -635,6 +655,10 @@ func fetchLoadblancerPoolsHealth(account cfaccounts.Account, wg *sync.WaitGroup)
 func fetchWorkerAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.HasAll(workerRequestsMetricName, workerErrorsMetricName, workerCPUTimeMetricName, workerDurationMetricName) {
+		return
+	}
+
 	r, err := fetchWorkerTotals(account.ID)
 	if err != nil {
 		log.Error("failed to fetch worker analytics for account ", account.ID, ": ", err)
@@ -663,6 +687,10 @@ func fetchWorkerAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
 func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.Has(logpushFailedJobsAccountMetricName) {
+		return
+	}
+
 	if viper.GetBool("free_tier") {
 		return
 	}
@@ -687,6 +715,10 @@ func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGr
 func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.HasAll(r2StorageTotalMetricName, r2StorageMetricName, r2OperationMetricName) {
+		return
+	}
+
 	r, err := fetchR2Account(account.ID)
 
 	if err != nil {
@@ -707,6 +739,10 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 
 func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	if deniedMetrics.Has(logpushFailedJobsZoneMetricName) {
+		return
+	}
 
 	if viper.GetBool("free_tier") {
 		return
@@ -735,6 +771,10 @@ func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 
 func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	if deniedMetrics.HasAll(zoneColocationVisitsMetricName, zoneColocationEdgeResponseBytesMetricName, zoneColocationRequestsTotalMetricName) {
+		return
+	}
 
 	// Colocation metrics are not available in non-enterprise zones
 	if viper.GetBool("free_tier") {
@@ -765,6 +805,8 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 func fetchZoneAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// No deniedMetrics guard: this query feeds ~30 metrics, so skipping it would
+	// mean denylisting every single one of them.
 	// None of the below referenced metrics are available in the free tier
 	if viper.GetBool("free_tier") {
 		return
@@ -979,6 +1021,10 @@ func addHTTPAdaptiveGroups(z *zoneResp, name string, account string) {
 func fetchEdgeErrorsByPathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.Has(zoneEdgeErrorsByPathMetricName) {
+		return
+	}
+
 	if !viper.GetBool("enable_edge_errors_by_path") {
 		return
 	}
@@ -1026,6 +1072,10 @@ func addEdgeErrorsByPath(z *zoneRespEdgeErrorsByPath, name string, account strin
 
 func fetchLoadBalancerAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	if deniedMetrics.HasAll(poolHealthStatusMetricName, poolRequestsTotalMetricName) {
+		return
+	}
 
 	// None of the below referenced metrics are available in the free tier
 	if viper.GetBool("free_tier") {
@@ -1088,11 +1138,19 @@ func addLoadBalancingRequestsAdaptive(z *lbResp, name string, account string) {
 func fetchZeroTrustAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	if deniedMetrics.HasAll(tunnelInfoMetricName, tunnelHealthStatusMetricName, tunnelConnectorInfoMetricName, tunnelConnectorActiveConnectionsMetricName) {
+		return
+	}
+
 	addCloudflareTunnelStatus(account)
 }
 
 func fetchAccountHTTPDataTransferAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	if deniedMetrics.HasAll(accountHTTPDataTransferMonthToDateMetricName, accountHTTPDataTransferProjectedMonthMetricName, accountHTTPDataTransferMonthElapsedMetricName, accountHTTPDataTransferMonthTotalMetricName) {
+		return
+	}
 
 	if !viper.GetBool("enable_account_usage_metrics") {
 		return
@@ -1146,6 +1204,10 @@ func addAccountHTTPDataTransfer(r *cloudflareResponseAccountHTTPDataTransfer, ac
 }
 
 func addCloudflareTunnelStatus(account cfaccounts.Account) {
+	// Connectors are a separate API call per tunnel, so skip them entirely when
+	// both connector metrics are denied.
+	skipConnectors := deniedMetrics.HasAll(tunnelConnectorInfoMetricName, tunnelConnectorActiveConnectionsMetricName)
+
 	tunnels := fetchCloudflareTunnels(account)
 	for _, t := range tunnels {
 		tunnelInfo.With(
@@ -1165,6 +1227,10 @@ func addCloudflareTunnelStatus(account cfaccounts.Account) {
 		// Each client/connector can open many connections to the Cloudflare edge,
 		// we opt to not expose metrics for each individual connection. We do expose
 		// an informational metric for each client/connector however.
+		if skipConnectors {
+			continue
+		}
+
 		clients := fetchCloudflareTunnelConnectors(account, t.ID)
 		for _, c := range clients {
 			originIP := ""
@@ -1216,6 +1282,10 @@ func getCloudflareTunnelStatusValue(status string) uint8 {
 
 func fetchZoneASNAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	if deniedMetrics.HasAll(zoneRequestASNMetricName, zoneBandwidthASNMetricName) {
+		return
+	}
 
 	// ASN metrics are not available in free tier
 	if viper.GetBool("free_tier") {
