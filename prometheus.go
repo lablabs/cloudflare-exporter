@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/biter777/countries"
 	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
@@ -59,6 +60,10 @@ const (
 	r2StorageTotalMetricName                        MetricName = "cloudflare_r2_storage_total_bytes"
 	r2StorageMetricName                             MetricName = "cloudflare_r2_storage_bytes"
 	r2OperationMetricName                           MetricName = "cloudflare_r2_operation_count"
+	r2UploadMetricName                              MetricName = "cloudflare_r2_upload_bytes_per_second"
+	r2DownloadMetricName                            MetricName = "cloudflare_r2_download_bytes_per_second"
+	r2ErrorRatioMetricName                          MetricName = "cloudflare_r2_error_ratio"
+	r2TrafficUpdatedMetricName                      MetricName = "cloudflare_r2_traffic_scrape_timestamp_seconds"
 	tunnelInfoMetricName                            MetricName = "cloudflare_tunnel_info"
 	tunnelHealthStatusMetricName                    MetricName = "cloudflare_tunnel_health_status"
 	tunnelConnectorInfoMetricName                   MetricName = "cloudflare_tunnel_connector_info"
@@ -322,6 +327,26 @@ var (
 		Help: "Number of operations performed by R2",
 	}, []string{"account", "bucket", "operation"})
 
+	r2Upload = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2UploadMetricName.String(),
+		Help: "Five-minute average uploaded bytes per second; excludes transfers smaller than 100 KiB",
+	}, []string{"account", "bucket"})
+
+	r2Download = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2DownloadMetricName.String(),
+		Help: "Five-minute average downloaded bytes per second; excludes transfers smaller than 100 KiB",
+	}, []string{"account", "bucket"})
+
+	r2ErrorRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2ErrorRatioMetricName.String(),
+		Help: "Fraction of recorded requests that failed in the five-minute window; zero for idle buckets; 429 is included in 4xx",
+	}, []string{"account", "bucket", "status_class"})
+
+	r2TrafficUpdated = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2TrafficUpdatedMetricName.String(),
+		Help: "Unix timestamp of the latest successful traffic collection; zero when the latest attempt failed",
+	}, []string{"account"})
+
 	tunnelInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: tunnelInfoMetricName.String(),
 		Help: "Reports Cloudflare Tunnel details",
@@ -418,6 +443,10 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
 	allMetricsSet.Add(r2StorageTotalMetricName)
 	allMetricsSet.Add(r2OperationMetricName)
+	allMetricsSet.Add(r2UploadMetricName)
+	allMetricsSet.Add(r2DownloadMetricName)
+	allMetricsSet.Add(r2ErrorRatioMetricName)
+	allMetricsSet.Add(r2TrafficUpdatedMetricName)
 	allMetricsSet.Add(tunnelInfoMetricName)
 	allMetricsSet.Add(tunnelHealthStatusMetricName)
 	allMetricsSet.Add(tunnelConnectorInfoMetricName)
@@ -563,6 +592,18 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	if !deniedMetrics.Has(r2OperationMetricName) {
 		prometheus.MustRegister(r2Operation)
 	}
+	if !deniedMetrics.Has(r2UploadMetricName) {
+		prometheus.MustRegister(r2Upload)
+	}
+	if !deniedMetrics.Has(r2DownloadMetricName) {
+		prometheus.MustRegister(r2Download)
+	}
+	if !deniedMetrics.Has(r2ErrorRatioMetricName) {
+		prometheus.MustRegister(r2ErrorRatio)
+	}
+	if !deniedMetrics.Has(r2TrafficUpdatedMetricName) {
+		prometheus.MustRegister(r2TrafficUpdated)
+	}
 	if !deniedMetrics.Has(tunnelInfoMetricName) {
 		prometheus.MustRegister(tunnelInfo)
 	}
@@ -684,12 +725,73 @@ func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGr
 	}
 }
 
+type r2BucketTraffic struct {
+	upload   uint64
+	download uint64
+	requests uint64
+	errors   map[string]uint64
+}
+
+func aggregateR2Traffic(account r2AccountResp) (map[string]*r2BucketTraffic, error) {
+	if len(account.R2BandwidthGroups) >= gqlQueryLimit || len(account.R2TrafficOperations) >= gqlQueryLimit {
+		return nil, fmt.Errorf("R2 traffic query reached group limit %d", gqlQueryLimit)
+	}
+	traffic := make(map[string]*r2BucketTraffic)
+	getBucket := func(name string) *r2BucketTraffic {
+		if traffic[name] == nil {
+			traffic[name] = &r2BucketTraffic{errors: map[string]uint64{"all": 0, "4xx": 0, "5xx": 0, "429": 0, "other": 0}}
+		}
+		return traffic[name]
+	}
+	for _, row := range account.R2StorageGroups {
+		getBucket(row.Dimensions.BucketName)
+	}
+	for _, row := range account.R2BandwidthGroups {
+		bucket := getBucket(row.Dimensions.BucketName)
+		bucket.upload += row.Sum.BytesUpload
+		bucket.download += row.Sum.BytesDownload
+	}
+	for _, row := range account.R2TrafficOperations {
+		status := row.Dimensions.ActionStatus
+		if status != "success" && status != "userError" && status != "internalError" {
+			return nil, fmt.Errorf("unknown R2 action status %q", status)
+		}
+		bucket := getBucket(row.Dimensions.BucketName)
+		bucket.requests += row.Sum.Requests
+		code := row.Dimensions.ResponseStatusCode
+		if code >= 400 || status != "success" {
+			bucket.errors["all"] += row.Sum.Requests
+			category := "other"
+			if code >= 400 && code < 500 {
+				category = "4xx"
+			}
+			if code >= 500 && code < 600 {
+				category = "5xx"
+			}
+			bucket.errors[category] += row.Sum.Requests
+			if code == 429 {
+				bucket.errors["429"] += row.Sum.Requests
+			}
+		}
+	}
+	return traffic, nil
+}
+
+func clearR2Traffic(account string) {
+	labels := prometheus.Labels{"account": account}
+	r2Upload.DeletePartialMatch(labels)
+	r2Download.DeletePartialMatch(labels)
+	r2ErrorRatio.DeletePartialMatch(labels)
+	r2TrafficUpdated.With(prometheus.Labels{"account": account}).Set(0)
+}
+
 func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r, err := fetchR2Account(account.ID)
 
 	if err != nil {
+		clearR2Traffic(account.Name)
 		return
 	}
 	for _, acc := range r.Viewer.Accounts {
@@ -702,6 +804,25 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 			r2Operation.With(prometheus.Labels{"account": account.Name, "bucket": operation.Dimensions.BucketName, "operation": operation.Dimensions.Action}).Set(float64(operation.Sum.Requests))
 		}
 		r2StorageTotal.With(prometheus.Labels{"account": account.Name}).Set(float64(totalStorage))
+		traffic, err := aggregateR2Traffic(acc)
+		if err != nil {
+			clearR2Traffic(account.Name)
+			log.Errorf("invalid R2 traffic for account %s: %v", account.ID, err)
+			continue
+		}
+		clearR2Traffic(account.Name)
+		for bucketName, bucket := range traffic {
+			r2Upload.With(prometheus.Labels{"account": account.Name, "bucket": bucketName}).Set(float64(bucket.upload) / r2TrafficWindow.Seconds())
+			r2Download.With(prometheus.Labels{"account": account.Name, "bucket": bucketName}).Set(float64(bucket.download) / r2TrafficWindow.Seconds())
+			for category, count := range bucket.errors {
+				var ratio float64
+				if bucket.requests > 0 {
+					ratio = float64(count) / float64(bucket.requests)
+				}
+				r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": bucketName, "status_class": category}).Set(ratio)
+			}
+		}
+		r2TrafficUpdated.With(prometheus.Labels{"account": account.Name}).Set(float64(time.Now().Unix()))
 	}
 }
 

@@ -152,7 +152,27 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_r2_operation_count Number of operations performed by R2
 # HELP cloudflare_r2_storage_bytes Storage used by R2
 # HELP cloudflare_r2_storage_total_bytes Total storage used by R2
+# HELP cloudflare_r2_upload_bytes_per_second Five-minute average uploaded bytes per second
+# HELP cloudflare_r2_download_bytes_per_second Five-minute average downloaded bytes per second
+# HELP cloudflare_r2_error_ratio Fraction of recorded requests that failed in the five-minute window
+# HELP cloudflare_r2_traffic_scrape_timestamp_seconds Unix timestamp of successful traffic collection, or zero after failure
 ```
+
+### R2 Bandwidth and Error Metrics
+
+The bandwidth and error metrics are gauges over a rolling five-minute window ending at the existing `SCRAPE_DELAY`. They are already rates or ratios; do not apply `rate()` to them. Upload/download metrics have `account` and `bucket` labels. Error ratios also have a `status_class` label: `all`, `4xx`, `5xx`, `429`, or `other`. Each ratio uses all recorded bucket requests as its denominator. `429` is a subset of `4xx`; `all` also includes operations reported as errors without a matching HTTP error status. Idle buckets returned by the daily storage query report zero throughput and zero error ratios.
+
+[Cloudflare bandwidth analytics](https://developers.cloudflare.com/r2/platform/metrics-analytics/#bandwidth-dataset) excludes transfers smaller than 100 KiB. This threshold applies to transfer size, not object size. Error ratios only cover requests recorded by R2, not client-side connection failures.
+
+Traffic fields are included in the existing R2 GraphQL request, using the existing client and credentials. Daily storage and operation filters remain unchanged; aliased operation fields use the five-minute traffic window. A failed R2 query removes that account's traffic measurements and sets `cloudflare_r2_traffic_scrape_timestamp_seconds` to zero; the existing daily gauges retain their previous values. The timestamp also allows queries to reject measurements if the collection loop stops progressing. For example, with the default 60-second scrape interval:
+
+```promql
+cloudflare_r2_upload_bytes_per_second
+and on (account, instance, job)
+(time() - cloudflare_r2_traffic_scrape_timestamp_seconds < 180)
+```
+
+Adjust the freshness threshold if `SCRAPE_INTERVAL` changes. Bucket labels retain the jurisdiction prefix supplied by the analytics API, for example `eu_example-bucket`.
 
 ### Edge Errors by Path Metric (Opt-in)
 

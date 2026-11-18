@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 const (
 	freePlanID      = "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	apiPerPageLimit = 999
+	r2TrafficWindow = 5 * time.Minute
 )
 
 type cloudflareResponse struct {
@@ -86,6 +88,27 @@ type r2AccountResp struct {
 			Requests uint64 `json:"requests"`
 		} `json:"sum"`
 	} `json:"r2OperationsAdaptiveGroups"`
+
+	R2BandwidthGroups []struct {
+		Dimensions struct {
+			BucketName string `json:"bucketName"`
+		} `json:"dimensions"`
+		Sum struct {
+			BytesUpload   uint64 `json:"bytesUpload"`
+			BytesDownload uint64 `json:"bytesDownload"`
+		} `json:"sum"`
+	} `json:"r2BandwidthUsageAdaptiveGroups"`
+
+	R2TrafficOperations []struct {
+		Dimensions struct {
+			BucketName         string `json:"bucketName"`
+			ActionStatus       string `json:"actionStatus"`
+			ResponseStatusCode uint16 `json:"responseStatusCode"`
+		} `json:"dimensions"`
+		Sum struct {
+			Requests uint64 `json:"requests"`
+		} `json:"sum"`
+	} `json:"r2TrafficOperations"`
 }
 
 type cloudflareResponseR2Account struct {
@@ -1039,7 +1062,7 @@ func fetchEdgeErrorsByPath(zoneIDs []string) (*cloudflareResponseEdgeErrorsByPat
 }
 
 func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
-	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $date: String!) {
+	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $date: String!, $mintime: Time!, $maxtime: Time!) {
 		viewer {
 		  accounts(filter: {accountTag : $accountID }) {
 			r2StorageAdaptiveGroups(
@@ -1066,6 +1089,37 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 					requests
 				}
 			}
+			r2BandwidthUsageAdaptiveGroups(
+				filter: {
+					datetime_geq: $mintime
+					datetime_lt: $maxtime
+				},
+				limit: $limit
+			) {
+				dimensions {
+					bucketName
+				}
+				sum {
+					bytesUpload
+					bytesDownload
+				}
+			}
+			r2TrafficOperations: r2OperationsAdaptiveGroups(
+				filter: {
+					datetime_geq: $mintime
+					datetime_lt: $maxtime
+				},
+				limit: $limit
+			) {
+				dimensions {
+					bucketName
+					actionStatus
+					responseStatusCode
+				}
+				sum {
+					requests
+				}
+			}
 			}
 		  }
 	  }`)
@@ -1074,6 +1128,8 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 	request.Var("accountID", accountID)
 	request.Var("limit", gqlQueryLimit)
 	request.Var("date", now.Format("2006-01-02"))
+	request.Var("mintime", now.Add(-r2TrafficWindow))
+	request.Var("maxtime", now)
 
 	gql.Mu.RLock()
 	defer gql.Mu.RUnlock()
@@ -1085,6 +1141,9 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 	if err := gql.Client.Run(ctx, request, &resp); err != nil {
 		log.Errorf("error fetching R2 account: %v", err)
 		return nil, err
+	}
+	if len(resp.Viewer.Accounts) != 1 {
+		return nil, fmt.Errorf("expected one R2 analytics account, got %d", len(resp.Viewer.Accounts))
 	}
 	return &resp, nil
 }
