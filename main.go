@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	_ "net/http/pprof" // #nosec G108 - pprof is controlled via enable_pprof flag
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/nelkinda/health-go"
@@ -112,32 +116,21 @@ func filterExcludedZones(all []cfzones.Zone, exclude []string) []cfzones.Zone {
 	return filtered
 }
 
-func fetchMetrics() {
+func fetchMetrics(ctx context.Context) {
 	var wg sync.WaitGroup
 	targetAccounts := getTargetAccounts()
-	accounts := fetchAccounts(targetAccounts)
+	accounts := fetchAccounts(ctx, targetAccounts)
 
 	for _, a := range accounts {
-		wg.Add(1)
-		go fetchWorkerAnalytics(a, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForAccount(a, &wg)
-
-		wg.Add(1)
-		go fetchR2StorageForAccount(a, &wg)
-
-		wg.Add(1)
-		go fetchLoadblancerPoolsHealth(a, &wg)
-
-		wg.Add(1)
-		go fetchZeroTrustAnalyticsForAccount(a, &wg)
-
-		wg.Add(1)
-		go fetchAccountHTTPDataTransferAnalytics(a, &wg)
+		wg.Go(func() { fetchWorkerAnalytics(ctx, a) })
+		wg.Go(func() { fetchLogpushAnalyticsForAccount(ctx, a) })
+		wg.Go(func() { fetchR2StorageForAccount(ctx, a) })
+		wg.Go(func() { fetchLoadblancerPoolsHealth(ctx, a) })
+		wg.Go(func() { fetchZeroTrustAnalyticsForAccount(ctx, a) })
+		wg.Go(func() { fetchAccountHTTPDataTransferAnalytics(ctx, a) })
 	}
 
-	zones := fetchZones(accounts)
+	zones := fetchZones(ctx, accounts)
 	tzones := getTargetZones()
 	fzones := filterZones(zones, tzones)
 	ezones := getExcludedZones()
@@ -148,53 +141,37 @@ func fetchMetrics() {
 
 	zoneCount := len(filteredZones)
 	if zoneCount > 0 && zoneCount <= cfgraphqlreqlimit {
-		wg.Add(1)
-		go fetchZoneAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchZoneColocationAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLoadBalancerAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchLogpushAnalyticsForZone(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchZoneASNAnalytics(filteredZones, &wg)
-
-		wg.Add(1)
-		go fetchEdgeErrorsByPathAnalytics(filteredZones, &wg)
+		fetchZoneMetrics(ctx, &wg, filteredZones)
 	} else if zoneCount > cfgraphqlreqlimit {
 		for s := 0; s < zoneCount; s += cfgraphqlreqlimit {
 			e := s + cfgraphqlreqlimit
 			if e > zoneCount {
 				e = zoneCount
 			}
-			wg.Add(1)
-			go fetchZoneAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchZoneColocationAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLoadBalancerAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchLogpushAnalyticsForZone(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchZoneASNAnalytics(filteredZones[s:e], &wg)
-
-			wg.Add(1)
-			go fetchEdgeErrorsByPathAnalytics(filteredZones[s:e], &wg)
+			fetchZoneMetrics(ctx, &wg, filteredZones[s:e])
 		}
 	}
 
 	wg.Wait()
 }
 
-func runExporter() {
+// fetchZoneMetrics fans out every zone-scoped collector for a single batch of
+// zones, each on its own goroutine tracked by wg.
+func fetchZoneMetrics(ctx context.Context, wg *sync.WaitGroup, zones []cfzones.Zone) {
+	wg.Go(func() { fetchZoneAnalytics(ctx, zones) })
+	wg.Go(func() { fetchZoneColocationAnalytics(ctx, zones) })
+	wg.Go(func() { fetchLoadBalancerAnalytics(ctx, zones) })
+	wg.Go(func() { fetchLogpushAnalyticsForZone(ctx, zones) })
+	wg.Go(func() { fetchZoneASNAnalytics(ctx, zones) })
+	wg.Go(func() { fetchEdgeErrorsByPathAnalytics(ctx, zones) })
+}
+
+func runExporter() error {
+	// The exporter owns the whole process lifecycle: derive a context that is
+	// cancelled on SIGINT/SIGTERM so we can drain connections on shutdown.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	cfgMetricsPath := viper.GetString("metrics_path")
 
 	// Handle pprof configuration
@@ -221,8 +198,18 @@ func runExporter() {
 	log.Info("Scrape interval set to ", scrapeInterval)
 
 	go func() {
-		for ; true; <-time.NewTicker(scrapeInterval).C {
-			go fetchMetrics()
+		ticker := time.NewTicker(scrapeInterval)
+		defer ticker.Stop()
+		for {
+			// Run synchronously: the ticker coalesces ticks while a scrape is
+			// in flight, so a slow scrape can't pile up overlapping runs, and
+			// ctx cancellation unwinds the in-flight scrape before we return.
+			fetchMetrics(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
 
@@ -243,16 +230,44 @@ func runExporter() {
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
-	log.Fatal(server.ListenAndServe())
+	// Serve in the background so we can block on either a server error or a
+	// shutdown signal. http.ErrServerClosed is the expected, clean return
+	// value once Shutdown has been called.
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+		log.Info("Shutdown signal received, draining connections...")
+		// Fresh context: ctx is already cancelled. Bound the drain so a stuck
+		// connection cannot hang shutdown forever.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		log.Info("Shutdown complete")
+		return nil
+	}
 }
 
 func main() {
 	cmd := &cobra.Command{
 		Use:   "cloudflare_exporter",
 		Short: "Prometheus exporter exposing Cloudflare Analytics dashboard data on a per-zone basis, as well as Worker metrics",
-		Run: func(_ *cobra.Command, _ []string) {
-			runExporter()
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runExporter()
 		},
+		// runExporter errors are reported via log.Fatal below; don't let cobra
+		// also print the error or the usage text on a runtime failure.
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	viper.AutomaticEnv()
@@ -383,5 +398,7 @@ func main() {
 		log.Fatal("Please provide CF_API_KEY+CF_API_EMAIL or CF_API_TOKEN")
 	}
 
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }

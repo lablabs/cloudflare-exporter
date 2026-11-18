@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/biter777/countries"
 	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
@@ -598,10 +598,8 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	}
 }
 
-func fetchLoadblancerPoolsHealth(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	pools := fetchLoadblancerPools(account)
+func fetchLoadblancerPoolsHealth(ctx context.Context, account cfaccounts.Account) {
+	pools := fetchLoadblancerPools(ctx, account)
 	if pools == nil {
 		return
 	}
@@ -632,12 +630,12 @@ func fetchLoadblancerPoolsHealth(account cfaccounts.Account, wg *sync.WaitGroup)
 	}
 }
 
-func fetchWorkerAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	r, err := fetchWorkerTotals(account.ID)
+func fetchWorkerAnalytics(ctx context.Context, account cfaccounts.Account) {
+	r, err := fetchWorkerTotals(ctx, account.ID)
 	if err != nil {
-		log.Error("failed to fetch worker analytics for account ", account.ID, ": ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch worker analytics for account ", account.ID, ": ", err)
+		}
 		return
 	}
 
@@ -660,17 +658,17 @@ func fetchWorkerAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchLogpushAnalyticsForAccount(ctx context.Context, account cfaccounts.Account) {
 	if viper.GetBool("free_tier") {
 		return
 	}
 
-	r, err := fetchLogpushAccount(account.ID)
+	r, err := fetchLogpushAccount(ctx, account.ID)
 
 	if err != nil {
-		log.Error("failed to fetch logpush analytics for account ", account.ID, ": ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch logpush analytics for account ", account.ID, ": ", err)
+		}
 		return
 	}
 
@@ -684,10 +682,8 @@ func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGr
 	}
 }
 
-func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	r, err := fetchR2Account(account.ID)
+func fetchR2StorageForAccount(ctx context.Context, account cfaccounts.Account) {
+	r, err := fetchR2Account(ctx, account.ID)
 
 	if err != nil {
 		return
@@ -705,9 +701,7 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchLogpushAnalyticsForZone(ctx context.Context, zones []cfzones.Zone) {
 	if viper.GetBool("free_tier") {
 		return
 	}
@@ -717,10 +711,12 @@ func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchLogpushZone(zoneIDs)
+	r, err := fetchLogpushZone(ctx, zoneIDs)
 
 	if err != nil {
-		log.Error("failed to fetch logpush analytics for zones: ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch logpush analytics for zones: ", err)
+		}
 		return
 	}
 
@@ -733,9 +729,7 @@ func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchZoneColocationAnalytics(ctx context.Context, zones []cfzones.Zone) {
 	// Colocation metrics are not available in non-enterprise zones
 	if viper.GetBool("free_tier") {
 		return
@@ -746,9 +740,11 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchColoTotals(zoneIDs)
+	r, err := fetchColoTotals(ctx, zoneIDs)
 	if err != nil {
-		log.Error("failed to fetch colocation analytics for zones: ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch colocation analytics for zones: ", err)
+		}
 		return
 	}
 	for _, z := range r.Viewer.Zones {
@@ -762,9 +758,7 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	}
 }
 
-func fetchZoneAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchZoneAnalytics(ctx context.Context, zones []cfzones.Zone) {
 	// None of the below referenced metrics are available in the free tier
 	if viper.GetBool("free_tier") {
 		return
@@ -775,9 +769,11 @@ func fetchZoneAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchZoneTotals(zoneIDs)
+	r, err := fetchZoneTotals(ctx, zoneIDs)
 	if err != nil {
-		log.Error("failed to fetch zone analytics: ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch zone analytics: ", err)
+		}
 		return
 	}
 
@@ -786,7 +782,7 @@ func fetchZoneAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		z := z
 
 		addHTTPGroups(&z, name, account)
-		addFirewallGroups(&z, name, account)
+		addFirewallGroups(ctx, &z, name, account)
 		addHealthCheckGroups(&z, name, account)
 		addHTTPAdaptiveGroups(&z, name, account)
 	}
@@ -861,7 +857,7 @@ func addHTTPGroups(z *zoneResp, name string, account string) {
 	zoneUniquesTotal.With(prometheus.Labels{"zone": name, "account": account}).Add(float64(zt.Unique.Uniques))
 }
 
-func addFirewallGroups(z *zoneResp, name string, account string) {
+func addFirewallGroups(ctx context.Context, z *zoneResp, name string, account string) {
 	// Nothing to do.
 	if len(z.FirewallEventsAdaptiveGroups) == 0 {
 		return
@@ -871,7 +867,7 @@ func addFirewallGroups(z *zoneResp, name string, account string) {
 	label := prometheus.Labels{"zone": name, "account": account}
 	zoneFirewallEventsCount.DeletePartialMatch(label)
 
-	rulesMap := fetchFirewallRules(z.ZoneTag)
+	rulesMap := fetchFirewallRules(ctx, z.ZoneTag)
 	for _, g := range z.FirewallEventsAdaptiveGroups {
 		zoneFirewallEventsCount.With(
 			prometheus.Labels{
@@ -976,9 +972,7 @@ func addHTTPAdaptiveGroups(z *zoneResp, name string, account string) {
 	}
 }
 
-func fetchEdgeErrorsByPathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchEdgeErrorsByPathAnalytics(ctx context.Context, zones []cfzones.Zone) {
 	if !viper.GetBool("enable_edge_errors_by_path") {
 		return
 	}
@@ -992,9 +986,11 @@ func fetchEdgeErrorsByPathAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchEdgeErrorsByPath(zoneIDs)
+	r, err := fetchEdgeErrorsByPath(ctx, zoneIDs)
 	if err != nil {
-		log.Error("failed to fetch edge errors by path: ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch edge errors by path: ", err)
+		}
 		return
 	}
 
@@ -1024,9 +1020,7 @@ func addEdgeErrorsByPath(z *zoneRespEdgeErrorsByPath, name string, account strin
 	}
 }
 
-func fetchLoadBalancerAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchLoadBalancerAnalytics(ctx context.Context, zones []cfzones.Zone) {
 	// None of the below referenced metrics are available in the free tier
 	if viper.GetBool("free_tier") {
 		return
@@ -1037,9 +1031,11 @@ func fetchLoadBalancerAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	l, err := fetchLoadBalancerTotals(zoneIDs)
+	l, err := fetchLoadBalancerTotals(ctx, zoneIDs)
 	if err != nil {
-		log.Error("failed to fetch load balancer analytics: ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch load balancer analytics: ", err)
+		}
 		return
 	}
 	for _, lb := range l.Viewer.Zones {
@@ -1085,15 +1081,11 @@ func addLoadBalancingRequestsAdaptive(z *lbResp, name string, account string) {
 	}
 }
 
-func fetchZeroTrustAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	addCloudflareTunnelStatus(account)
+func fetchZeroTrustAnalyticsForAccount(ctx context.Context, account cfaccounts.Account) {
+	addCloudflareTunnelStatus(ctx, account)
 }
 
-func fetchAccountHTTPDataTransferAnalytics(account cfaccounts.Account, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchAccountHTTPDataTransferAnalytics(ctx context.Context, account cfaccounts.Account) {
 	if !viper.GetBool("enable_account_usage_metrics") {
 		return
 	}
@@ -1101,9 +1093,11 @@ func fetchAccountHTTPDataTransferAnalytics(account cfaccounts.Account, wg *sync.
 	now, monthStart, nextMonthStart := GetMonthRange()
 	requestSource := viper.GetString("account_usage_request_source")
 
-	r, err := fetchAccountHTTPDataTransfer(account.ID, monthStart, now, requestSource)
+	r, err := fetchAccountHTTPDataTransfer(ctx, account.ID, monthStart, now, requestSource)
 	if err != nil {
-		log.Error("failed to fetch account HTTP data transfer analytics for account ", account.ID, ": ", err)
+		if !canceled(err) {
+			log.Error("failed to fetch account HTTP data transfer analytics for account ", account.ID, ": ", err)
+		}
 		return
 	}
 
@@ -1145,8 +1139,8 @@ func addAccountHTTPDataTransfer(r *cloudflareResponseAccountHTTPDataTransfer, ac
 	accountHTTPDataTransferMonthTotal.With(labels).Set(totalSeconds)
 }
 
-func addCloudflareTunnelStatus(account cfaccounts.Account) {
-	tunnels := fetchCloudflareTunnels(account)
+func addCloudflareTunnelStatus(ctx context.Context, account cfaccounts.Account) {
+	tunnels := fetchCloudflareTunnels(ctx, account)
 	for _, t := range tunnels {
 		tunnelInfo.With(
 			prometheus.Labels{
@@ -1165,7 +1159,7 @@ func addCloudflareTunnelStatus(account cfaccounts.Account) {
 		// Each client/connector can open many connections to the Cloudflare edge,
 		// we opt to not expose metrics for each individual connection. We do expose
 		// an informational metric for each client/connector however.
-		clients := fetchCloudflareTunnelConnectors(account, t.ID)
+		clients := fetchCloudflareTunnelConnectors(ctx, account, t.ID)
 		for _, c := range clients {
 			originIP := ""
 			if len(c.Conns) > 0 {
@@ -1214,9 +1208,7 @@ func getCloudflareTunnelStatusValue(status string) uint8 {
 	}
 }
 
-func fetchZoneASNAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func fetchZoneASNAnalytics(ctx context.Context, zones []cfzones.Zone) {
 	// ASN metrics are not available in free tier
 	if viper.GetBool("free_tier") {
 		return
@@ -1227,7 +1219,7 @@ func fetchZoneASNAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 		return
 	}
 
-	r, err := fetchASNTotals(zoneIDs)
+	r, err := fetchASNTotals(ctx, zoneIDs)
 	if err != nil {
 		return
 	}
