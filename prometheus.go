@@ -418,6 +418,9 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
 	allMetricsSet.Add(r2StorageTotalMetricName)
 	allMetricsSet.Add(r2OperationMetricName)
+	for metric := range r2TrafficMetrics {
+		allMetricsSet.Add(metric)
+	}
 	allMetricsSet.Add(tunnelInfoMetricName)
 	allMetricsSet.Add(tunnelHealthStatusMetricName)
 	allMetricsSet.Add(tunnelConnectorInfoMetricName)
@@ -446,6 +449,11 @@ func buildFilteredMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 }
 
 func mustRegisterMetrics(deniedMetrics MetricsSet) {
+	for name, metric := range r2TrafficMetrics {
+		if !deniedMetrics.Has(name) {
+			prometheus.MustRegister(metric)
+		}
+	}
 	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
 		prometheus.MustRegister(zoneRequestTotal)
 	}
@@ -690,11 +698,14 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	r, err := fetchR2Account(account.ID)
 
 	if err != nil {
+		clearR2Traffic(account.Name)
 		return
 	}
+	var buckets []string
 	for _, acc := range r.Viewer.Accounts {
 		var totalStorage uint64
 		for _, bucket := range acc.R2StorageGroups {
+			buckets = append(buckets, bucket.Dimensions.BucketName)
 			totalStorage += bucket.Max.PayloadSize
 			r2Storage.With(prometheus.Labels{"account": account.Name, "bucket": bucket.Dimensions.BucketName}).Set(float64(bucket.Max.PayloadSize))
 		}
@@ -703,6 +714,7 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 		}
 		r2StorageTotal.With(prometheus.Labels{"account": account.Name}).Set(float64(totalStorage))
 	}
+	fetchR2TrafficForAccount(account, buckets)
 }
 
 func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {
