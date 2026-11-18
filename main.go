@@ -296,7 +296,7 @@ func main() {
 	viper.BindEnv("scrape_interval")
 	viper.SetDefault("scrape_interval", 60)
 
-	flags.Bool("free_tier", false, "scrape only metrics included in free plan")
+	flags.Bool("free_tier", false, "use the free-plan-compatible collection path for zone analytics")
 	viper.BindEnv("free_tier")
 	viper.SetDefault("free_tier", false)
 
