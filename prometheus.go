@@ -753,7 +753,18 @@ func fetchZoneColocationAnalytics(zones []cfzones.Zone, wg *sync.WaitGroup) {
 	}
 	for _, z := range r.Viewer.Zones {
 		cg := z.ColoGroups
+		if len(cg) == 0 {
+			continue
+		}
+
 		name, account := findZoneAccountName(zones, z.ZoneTag)
+
+		// Clear stale series for this zone/account
+		label := prometheus.Labels{"zone": name, "account": account}
+		zoneColocationVisits.DeletePartialMatch(label)
+		zoneColocationEdgeResponseBytes.DeletePartialMatch(label)
+		zoneColocationRequestsTotal.DeletePartialMatch(label)
+
 		for _, c := range cg {
 			zoneColocationVisits.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.Visits))
 			zoneColocationEdgeResponseBytes.With(prometheus.Labels{"zone": name, "account": account, "colocation": c.Dimensions.ColoCode, "host": c.Dimensions.Host}).Add(float64(c.Sum.EdgeResponseBytes))
@@ -1242,6 +1253,11 @@ func addASNGroups(z *zoneRespASN, name string, account string) {
 	if len(z.HTTPRequestsASNGroups) == 0 {
 		return
 	}
+
+	// Clear stale series for this zone/account
+	label := prometheus.Labels{"zone": name, "account": account}
+	zoneRequestASN.DeletePartialMatch(label)
+	zoneBandwidthASN.DeletePartialMatch(label)
 
 	for _, g := range z.HTTPRequestsASNGroups {
 		asn := g.Dimensions.ClientASN
