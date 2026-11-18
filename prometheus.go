@@ -727,7 +727,10 @@ type r2BucketTraffic struct {
 	errors                     map[string]uint64
 }
 
-func aggregateR2Traffic(account r2TrafficAccount, buckets []string) (map[string]*r2BucketTraffic, error) {
+func aggregateR2Traffic(account r2AccountResp) (map[string]*r2BucketTraffic, error) {
+	if len(account.R2BandwidthGroups) >= gqlQueryLimit || len(account.R2TrafficOperations) >= gqlQueryLimit {
+		return nil, fmt.Errorf("R2 traffic query reached group limit %d", gqlQueryLimit)
+	}
 	traffic := make(map[string]*r2BucketTraffic)
 	bucket := func(name string) *r2BucketTraffic {
 		if traffic[name] == nil {
@@ -735,15 +738,15 @@ func aggregateR2Traffic(account r2TrafficAccount, buckets []string) (map[string]
 		}
 		return traffic[name]
 	}
-	for _, name := range buckets {
-		bucket(name)
+	for _, row := range account.R2StorageGroups {
+		bucket(row.Dimensions.BucketName)
 	}
-	for _, row := range account.Bandwidth {
+	for _, row := range account.R2BandwidthGroups {
 		b := bucket(row.Dimensions.BucketName)
 		b.upload += row.Sum.BytesUpload
 		b.download += row.Sum.BytesDownload
 	}
-	for _, row := range account.Operations {
+	for _, row := range account.R2TrafficOperations {
 		status := row.Dimensions.ActionStatus
 		if status != "success" && status != "userError" && status != "internalError" {
 			return nil, fmt.Errorf("unknown R2 action status %q", status)
@@ -777,32 +780,6 @@ func clearR2Traffic(account string) {
 	r2TrafficUpdated.WithLabelValues(account).Set(0)
 }
 
-func fetchR2TrafficForAccount(account cfaccounts.Account, buckets []string) {
-	data, err := fetchR2Traffic(account.ID)
-	var traffic map[string]*r2BucketTraffic
-	if err == nil {
-		traffic, err = aggregateR2Traffic(data, buckets)
-	}
-	if err != nil {
-		clearR2Traffic(account.Name)
-		log.Errorf("failed to fetch R2 traffic for account %s: %v", account.ID, err)
-		return
-	}
-	clearR2Traffic(account.Name)
-	for name, b := range traffic {
-		r2Upload.WithLabelValues(account.Name, name).Set(float64(b.upload) / r2TrafficWindow.Seconds())
-		r2Download.WithLabelValues(account.Name, name).Set(float64(b.download) / r2TrafficWindow.Seconds())
-		for category, count := range b.errors {
-			ratio := float64(0)
-			if b.requests > 0 {
-				ratio = float64(count) / float64(b.requests)
-			}
-			r2ErrorRatio.WithLabelValues(account.Name, name, category).Set(ratio)
-		}
-	}
-	r2TrafficUpdated.WithLabelValues(account.Name).Set(float64(time.Now().Unix()))
-}
-
 func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -812,11 +789,9 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 		clearR2Traffic(account.Name)
 		return
 	}
-	var buckets []string
 	for _, acc := range r.Viewer.Accounts {
 		var totalStorage uint64
 		for _, bucket := range acc.R2StorageGroups {
-			buckets = append(buckets, bucket.Dimensions.BucketName)
 			totalStorage += bucket.Max.PayloadSize
 			r2Storage.With(prometheus.Labels{"account": account.Name, "bucket": bucket.Dimensions.BucketName}).Set(float64(bucket.Max.PayloadSize))
 		}
@@ -824,8 +799,26 @@ func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {
 			r2Operation.With(prometheus.Labels{"account": account.Name, "bucket": operation.Dimensions.BucketName, "operation": operation.Dimensions.Action}).Set(float64(operation.Sum.Requests))
 		}
 		r2StorageTotal.With(prometheus.Labels{"account": account.Name}).Set(float64(totalStorage))
+		traffic, err := aggregateR2Traffic(acc)
+		if err != nil {
+			clearR2Traffic(account.Name)
+			log.Errorf("invalid R2 traffic for account %s: %v", account.ID, err)
+			continue
+		}
+		clearR2Traffic(account.Name)
+		for name, b := range traffic {
+			r2Upload.WithLabelValues(account.Name, name).Set(float64(b.upload) / r2TrafficWindow.Seconds())
+			r2Download.WithLabelValues(account.Name, name).Set(float64(b.download) / r2TrafficWindow.Seconds())
+			for category, count := range b.errors {
+				ratio := float64(0)
+				if b.requests > 0 {
+					ratio = float64(count) / float64(b.requests)
+				}
+				r2ErrorRatio.WithLabelValues(account.Name, name, category).Set(ratio)
+			}
+		}
+		r2TrafficUpdated.WithLabelValues(account.Name).Set(float64(time.Now().Unix()))
 	}
-	fetchR2TrafficForAccount(account, buckets)
 }
 
 func fetchLogpushAnalyticsForZone(zones []cfzones.Zone, wg *sync.WaitGroup) {

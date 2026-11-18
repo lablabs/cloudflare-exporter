@@ -164,7 +164,7 @@ The bandwidth and error metrics are gauges over a rolling five-minute window end
 
 [Cloudflare bandwidth analytics](https://developers.cloudflare.com/r2/platform/metrics-analytics/#bandwidth-dataset) excludes transfers smaller than 100 KiB. This threshold applies to transfer size, not object size. Error ratios only cover requests recorded by R2, not client-side connection failures.
 
-Traffic collection uses the existing GraphQL client and credentials. It makes one additional query per account per collection cycle. Failed traffic collection removes that account's traffic measurements and sets `cloudflare_r2_traffic_scrape_timestamp_seconds` to zero; daily storage and operation metrics are independent of traffic-query failures. The timestamp also allows queries to reject measurements if the collection loop stops progressing. For example, with the default 60-second scrape interval:
+Traffic fields are included in the existing R2 GraphQL request, using the existing client and credentials. Daily storage and operation filters remain unchanged; aliased operation fields use the five-minute traffic window. A failed R2 query removes that account's traffic measurements and sets `cloudflare_r2_traffic_scrape_timestamp_seconds` to zero; the existing daily gauges retain their previous values. The timestamp also allows queries to reject measurements if the collection loop stops progressing. For example, with the default 60-second scrape interval:
 
 ```promql
 cloudflare_r2_upload_bytes_per_second
