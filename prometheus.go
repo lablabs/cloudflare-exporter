@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/biter777/countries"
 	cfaccounts "github.com/cloudflare/cloudflare-go/v4/accounts"
@@ -325,6 +326,23 @@ var (
 		Name: r2OperationMetricName.String(),
 		Help: "Number of operations performed by R2",
 	}, []string{"account", "bucket", "operation"})
+
+	r2Upload = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2UploadMetricName.String(),
+		Help: "Five-minute average uploaded bytes per second; excludes transfers smaller than 100 KiB",
+	}, []string{"account", "bucket"})
+	r2Download = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2DownloadMetricName.String(),
+		Help: "Five-minute average downloaded bytes per second; excludes transfers smaller than 100 KiB",
+	}, []string{"account", "bucket"})
+	r2ErrorRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2ErrorRatioMetricName.String(),
+		Help: "Fraction of recorded requests that failed in the five-minute window; zero for idle buckets; 429 is included in 4xx",
+	}, []string{"account", "bucket", "status_class"})
+	r2TrafficUpdated = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: r2TrafficUpdatedMetricName.String(),
+		Help: "Unix timestamp of the latest successful traffic collection; zero when the latest attempt failed",
+	}, []string{"account"})
 
 	tunnelInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: tunnelInfoMetricName.String(),
@@ -702,6 +720,87 @@ func fetchLogpushAnalyticsForAccount(account cfaccounts.Account, wg *sync.WaitGr
 				"final":       strconv.Itoa(LogpushHealthAdaptiveGroup.Dimensions.Final)}).Add(float64(LogpushHealthAdaptiveGroup.Count))
 		}
 	}
+}
+
+type r2BucketTraffic struct {
+	upload, download, requests uint64
+	errors                     map[string]uint64
+}
+
+func aggregateR2Traffic(account r2TrafficAccount, buckets []string) (map[string]*r2BucketTraffic, error) {
+	traffic := make(map[string]*r2BucketTraffic)
+	bucket := func(name string) *r2BucketTraffic {
+		if traffic[name] == nil {
+			traffic[name] = &r2BucketTraffic{errors: map[string]uint64{"all": 0, "4xx": 0, "5xx": 0, "429": 0, "other": 0}}
+		}
+		return traffic[name]
+	}
+	for _, name := range buckets {
+		bucket(name)
+	}
+	for _, row := range account.Bandwidth {
+		b := bucket(row.Dimensions.BucketName)
+		b.upload += row.Sum.BytesUpload
+		b.download += row.Sum.BytesDownload
+	}
+	for _, row := range account.Operations {
+		status := row.Dimensions.ActionStatus
+		if status != "success" && status != "userError" && status != "internalError" {
+			return nil, fmt.Errorf("unknown R2 action status %q", status)
+		}
+		b := bucket(row.Dimensions.BucketName)
+		b.requests += row.Sum.Requests
+		code := row.Dimensions.ResponseStatusCode
+		if code >= 400 || status != "success" {
+			b.errors["all"] += row.Sum.Requests
+			category := "other"
+			if code >= 400 && code < 500 {
+				category = "4xx"
+			}
+			if code >= 500 && code < 600 {
+				category = "5xx"
+			}
+			b.errors[category] += row.Sum.Requests
+			if code == 429 {
+				b.errors["429"] += row.Sum.Requests
+			}
+		}
+	}
+	return traffic, nil
+}
+
+func clearR2Traffic(account string) {
+	labels := prometheus.Labels{"account": account}
+	r2Upload.DeletePartialMatch(labels)
+	r2Download.DeletePartialMatch(labels)
+	r2ErrorRatio.DeletePartialMatch(labels)
+	r2TrafficUpdated.WithLabelValues(account).Set(0)
+}
+
+func fetchR2TrafficForAccount(account cfaccounts.Account, buckets []string) {
+	data, err := fetchR2Traffic(account.ID)
+	var traffic map[string]*r2BucketTraffic
+	if err == nil {
+		traffic, err = aggregateR2Traffic(data, buckets)
+	}
+	if err != nil {
+		clearR2Traffic(account.Name)
+		log.Errorf("failed to fetch R2 traffic for account %s: %v", account.ID, err)
+		return
+	}
+	clearR2Traffic(account.Name)
+	for name, b := range traffic {
+		r2Upload.WithLabelValues(account.Name, name).Set(float64(b.upload) / r2TrafficWindow.Seconds())
+		r2Download.WithLabelValues(account.Name, name).Set(float64(b.download) / r2TrafficWindow.Seconds())
+		for category, count := range b.errors {
+			ratio := float64(0)
+			if b.requests > 0 {
+				ratio = float64(count) / float64(b.requests)
+			}
+			r2ErrorRatio.WithLabelValues(account.Name, name, category).Set(ratio)
+		}
+	}
+	r2TrafficUpdated.WithLabelValues(account.Name).Set(float64(time.Now().Unix()))
 }
 
 func fetchR2StorageForAccount(account cfaccounts.Account, wg *sync.WaitGroup) {

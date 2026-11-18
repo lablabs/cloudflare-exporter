@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 const (
 	freePlanID      = "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	apiPerPageLimit = 999
+	r2TrafficWindow = 5 * time.Minute
 )
 
 type cloudflareResponse struct {
@@ -86,6 +88,20 @@ type r2AccountResp struct {
 			Requests uint64 `json:"requests"`
 		} `json:"sum"`
 	} `json:"r2OperationsAdaptiveGroups"`
+}
+
+type r2TrafficAccount struct {
+	Bandwidth []struct {
+		Dimensions struct{ BucketName string }
+		Sum        struct{ BytesUpload, BytesDownload uint64 }
+	}
+	Operations []struct {
+		Dimensions struct {
+			BucketName, ActionStatus string
+			ResponseStatusCode       int
+		}
+		Sum struct{ Requests uint64 }
+	}
 }
 
 type cloudflareResponseR2Account struct {
@@ -1087,6 +1103,42 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func fetchR2Traffic(accountID string) (r2TrafficAccount, error) {
+	request := graphql.NewRequest(`query($accountID: String!, $limit: Int!, $mintime: Time!, $maxtime: Time!) {
+        viewer { accounts(filter: {accountTag: $accountID}) {
+            bandwidth: r2BandwidthUsageAdaptiveGroups(limit: $limit, filter: {
+                datetime_geq: $mintime, datetime_lt: $maxtime
+            }) { dimensions { bucketName } sum { bytesUpload bytesDownload } }
+            operations: r2OperationsAdaptiveGroups(limit: $limit, filter: {
+                datetime_geq: $mintime, datetime_lt: $maxtime
+            }) { dimensions { bucketName actionStatus responseStatusCode } sum { requests } }
+        } }
+    }`)
+	end, _ := GetTimeRange()
+	request.Var("accountID", accountID)
+	request.Var("limit", gqlQueryLimit)
+	request.Var("mintime", end.Add(-r2TrafficWindow))
+	request.Var("maxtime", end)
+	var response struct {
+		Viewer struct{ Accounts []r2TrafficAccount }
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cftimeout)
+	defer cancel()
+	gql.Mu.RLock()
+	defer gql.Mu.RUnlock()
+	if err := gql.Client.Run(ctx, request, &response); err != nil {
+		return r2TrafficAccount{}, fmt.Errorf("query R2 traffic: %w", err)
+	}
+	if len(response.Viewer.Accounts) != 1 {
+		return r2TrafficAccount{}, fmt.Errorf("expected one R2 analytics account, got %d", len(response.Viewer.Accounts))
+	}
+	data := response.Viewer.Accounts[0]
+	if len(data.Bandwidth) >= gqlQueryLimit || len(data.Operations) >= gqlQueryLimit {
+		return r2TrafficAccount{}, fmt.Errorf("R2 traffic query reached group limit %d", gqlQueryLimit)
+	}
+	return data, nil
 }
 
 func fetchCloudflareTunnels(account cfaccounts.Account) []cfzero_trust.TunnelListResponse {
