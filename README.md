@@ -76,7 +76,7 @@ The exporter can be configured using env variables or command flags.
 | `METRICS_PATH` |  path for metrics, default `/metrics` |
 | `SCRAPE_DELAY` | scrape delay in seconds, default `300` |
 | `SCRAPE_INTERVAL` | scrape interval in seconds (will query cloudflare every SCRAPE_INTERVAL seconds), default `60` |
-| `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported |
+| `METRICS_DENYLIST` | (Optional) cloudflare-exporter metrics to not export, comma delimited list of cloudflare-exporter metrics. If not set, all metrics are exported. When every metric a Cloudflare query would populate is denied, that query is skipped entirely, so no API call is made and no permission for it is needed. The one exception is the main zone analytics query, which is always issued |
 | `ENABLE_PPROF` | (Optional) enable pprof profiling endpoints at `/debug/pprof/`. Accepts `true` or `false`, default `false`. **Warning**: Only enable in development/debugging environments |
 | `ENABLE_EDGE_ERRORS_BY_PATH` | (Optional) enable edge errors by path metric. Accepts `true` or `false`, default `false`. See [Edge Errors by Path Metric](#edge-errors-by-path-metric-opt-in) |
 | `ENABLE_ACCOUNT_USAGE_METRICS` | (Optional) enable account-level current calendar month HTTP data transfer metrics. Accepts `true` or `false`, default `false`. See [Account HTTP Data Transfer Usage Metrics](#account-http-data-transfer-usage-metrics-opt-in) |

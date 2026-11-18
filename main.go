@@ -215,7 +215,8 @@ func runExporter() {
 		log.Fatalf("Error building metrics set: %v", err)
 	}
 	log.Debugf("Metrics set: %v", metricsSet)
-	mustRegisterMetrics(metricsSet)
+	deniedMetrics = metricsSet
+	mustRegisterMetrics()
 
 	scrapeInterval := time.Duration(viper.GetInt("scrape_interval")) * time.Second
 	log.Info("Scrape interval set to ", scrapeInterval)
