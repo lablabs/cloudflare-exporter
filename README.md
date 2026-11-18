@@ -158,7 +158,7 @@ Note: `ZONE_<name>` configuration is not supported as flag.
 # HELP cloudflare_r2_traffic_scrape_timestamp_seconds Unix timestamp of successful traffic collection, or zero after failure
 ```
 
-### R2 bandwidth and error metrics
+### R2 Bandwidth and Error Metrics
 
 The bandwidth and error metrics are gauges over a rolling five-minute window ending at the existing `SCRAPE_DELAY`. They are already rates or ratios; do not apply `rate()` to them. Upload/download metrics have `account` and `bucket` labels. Error ratios also have a `status_class` label: `all`, `4xx`, `5xx`, `429`, or `other`. Each ratio uses all recorded bucket requests as its denominator. `429` is a subset of `4xx`; `all` also includes operations reported as errors without a matching HTTP error status. Idle buckets returned by the daily storage query report zero throughput and zero error ratios.
 

@@ -88,6 +88,7 @@ type r2AccountResp struct {
 			Requests uint64 `json:"requests"`
 		} `json:"sum"`
 	} `json:"r2OperationsAdaptiveGroups"`
+
 	R2BandwidthGroups []struct {
 		Dimensions struct {
 			BucketName string `json:"bucketName"`
@@ -97,11 +98,12 @@ type r2AccountResp struct {
 			BytesDownload uint64 `json:"bytesDownload"`
 		} `json:"sum"`
 	} `json:"r2BandwidthUsageAdaptiveGroups"`
+
 	R2TrafficOperations []struct {
 		Dimensions struct {
 			BucketName         string `json:"bucketName"`
 			ActionStatus       string `json:"actionStatus"`
-			ResponseStatusCode int    `json:"responseStatusCode"`
+			ResponseStatusCode uint16 `json:"responseStatusCode"`
 		} `json:"dimensions"`
 		Sum struct {
 			Requests uint64 `json:"requests"`
@@ -1087,17 +1089,36 @@ func fetchR2Account(accountID string) (*cloudflareResponseR2Account, error) {
 					requests
 				}
 			}
-			r2BandwidthUsageAdaptiveGroups(limit: $limit, filter: {
-				datetime_geq: $mintime, datetime_lt: $maxtime
-			}) {
-				dimensions { bucketName }
-				sum { bytesUpload bytesDownload }
+			r2BandwidthUsageAdaptiveGroups(
+				filter: {
+					datetime_geq: $mintime
+					datetime_lt: $maxtime
+				},
+				limit: $limit
+			) {
+				dimensions {
+					bucketName
+				}
+				sum {
+					bytesUpload
+					bytesDownload
+				}
 			}
-			r2TrafficOperations: r2OperationsAdaptiveGroups(limit: $limit, filter: {
-				datetime_geq: $mintime, datetime_lt: $maxtime
-			}) {
-				dimensions { bucketName actionStatus responseStatusCode }
-				sum { requests }
+			r2TrafficOperations: r2OperationsAdaptiveGroups(
+				filter: {
+					datetime_geq: $mintime
+					datetime_lt: $maxtime
+				},
+				limit: $limit
+			) {
+				dimensions {
+					bucketName
+					actionStatus
+					responseStatusCode
+				}
+				sum {
+					requests
+				}
 			}
 			}
 		  }

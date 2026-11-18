@@ -132,39 +132,41 @@ func TestR2MetricsCollection(t *testing.T) {
 		gauge prometheus.Gauge
 		want  float64
 	}{
-		{"daily storage", r2Storage.WithLabelValues(account.Name, buckets[0]), 12345},
-		{"daily operations", r2Operation.WithLabelValues(account.Name, buckets[0], "GetObject"), 1234},
-		{"upload", r2Upload.WithLabelValues(account.Name, buckets[0]), 20},
-		{"download", r2Download.WithLabelValues(account.Name, buckets[0]), 30},
-		{"all errors", r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "all"), .12},
-		{"4xx errors", r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "4xx"), .07},
-		{"5xx errors", r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "5xx"), .03},
-		{"other errors", r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "other"), .02},
-		{"throttling", r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "429"), .02},
-		{"idle errors", r2ErrorRatio.WithLabelValues(account.Name, buckets[1], "all"), 0},
+		{"daily storage", r2Storage.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0]}), 12345},
+		{"daily operations", r2Operation.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "operation": "GetObject"}), 1234},
+		{"upload", r2Upload.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0]}), 20},
+		{"download", r2Download.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0]}), 30},
+		{"all errors", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "all"}), .12},
+		{"4xx errors", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "4xx"}), .07},
+		{"5xx errors", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "5xx"}), .03},
+		{"other errors", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "other"}), .02},
+		{"throttling", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "429"}), .02},
+		{"idle errors", r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[1], "status_class": "all"}), 0},
 	} {
-		if got := r2GaugeValue(t, check.gauge); got != check.want {
-			t.Errorf("%s: got %v, want %v", check.name, got, check.want)
-		}
+		t.Run(check.name, func(t *testing.T) {
+			if got := r2GaugeValue(t, check.gauge); got != check.want {
+				t.Errorf("got %v, want %v", got, check.want)
+			}
+		})
 	}
-	if r2GaugeValue(t, r2TrafficUpdated.WithLabelValues(account.Name)) == 0 {
+	if r2GaugeValue(t, r2TrafficUpdated.With(prometheus.Labels{"account": account.Name})) == 0 {
 		t.Fatal("successful collection must set freshness")
 	}
 	mode.Store(1)
 	collect()
-	if r2GaugeValue(t, r2Upload.WithLabelValues(account.Name, buckets[0])) != 0 || r2GaugeValue(t, r2ErrorRatio.WithLabelValues(account.Name, buckets[0], "all")) != 0 {
+	if r2GaugeValue(t, r2Upload.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0]})) != 0 || r2GaugeValue(t, r2ErrorRatio.With(prometheus.Labels{"account": account.Name, "bucket": buckets[0], "status_class": "all"})) != 0 {
 		t.Fatal("successful empty window must clear old measurements to zero")
 	}
-	r2Upload.WithLabelValues("Other account", "other-bucket").Set(123)
+	r2Upload.With(prometheus.Labels{"account": "Other account", "bucket": "other-bucket"}).Set(123)
 	mode.Store(2)
 	collect()
 	if n := r2Upload.DeletePartialMatch(prometheus.Labels{"account": account.Name}); n != 0 {
 		t.Fatal("failed collection retained old throughput")
 	}
-	if r2GaugeValue(t, r2TrafficUpdated.WithLabelValues(account.Name)) != 0 {
+	if r2GaugeValue(t, r2TrafficUpdated.With(prometheus.Labels{"account": account.Name})) != 0 {
 		t.Fatal("failed collection must invalidate freshness")
 	}
-	if r2GaugeValue(t, r2Upload.WithLabelValues("Other account", "other-bucket")) != 123 {
+	if r2GaugeValue(t, r2Upload.With(prometheus.Labels{"account": "Other account", "bucket": "other-bucket"})) != 123 {
 		t.Fatal("failure affected another account")
 	}
 }
