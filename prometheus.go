@@ -59,6 +59,10 @@ const (
 	r2StorageTotalMetricName                        MetricName = "cloudflare_r2_storage_total_bytes"
 	r2StorageMetricName                             MetricName = "cloudflare_r2_storage_bytes"
 	r2OperationMetricName                           MetricName = "cloudflare_r2_operation_count"
+	r2UploadMetricName                              MetricName = "cloudflare_r2_upload_bytes_per_second"
+	r2DownloadMetricName                            MetricName = "cloudflare_r2_download_bytes_per_second"
+	r2ErrorRatioMetricName                          MetricName = "cloudflare_r2_error_ratio"
+	r2TrafficUpdatedMetricName                      MetricName = "cloudflare_r2_traffic_scrape_timestamp_seconds"
 	tunnelInfoMetricName                            MetricName = "cloudflare_tunnel_info"
 	tunnelHealthStatusMetricName                    MetricName = "cloudflare_tunnel_health_status"
 	tunnelConnectorInfoMetricName                   MetricName = "cloudflare_tunnel_connector_info"
@@ -418,9 +422,10 @@ func buildAllMetricsSet() MetricsSet {
 	allMetricsSet.Add(logpushFailedJobsZoneMetricName)
 	allMetricsSet.Add(r2StorageTotalMetricName)
 	allMetricsSet.Add(r2OperationMetricName)
-	for metric := range r2TrafficMetrics {
-		allMetricsSet.Add(metric)
-	}
+	allMetricsSet.Add(r2UploadMetricName)
+	allMetricsSet.Add(r2DownloadMetricName)
+	allMetricsSet.Add(r2ErrorRatioMetricName)
+	allMetricsSet.Add(r2TrafficUpdatedMetricName)
 	allMetricsSet.Add(tunnelInfoMetricName)
 	allMetricsSet.Add(tunnelHealthStatusMetricName)
 	allMetricsSet.Add(tunnelConnectorInfoMetricName)
@@ -449,11 +454,6 @@ func buildFilteredMetricsSet(metricsDenylist []string) (MetricsSet, error) {
 }
 
 func mustRegisterMetrics(deniedMetrics MetricsSet) {
-	for name, metric := range r2TrafficMetrics {
-		if !deniedMetrics.Has(name) {
-			prometheus.MustRegister(metric)
-		}
-	}
 	if !deniedMetrics.Has(zoneRequestTotalMetricName) {
 		prometheus.MustRegister(zoneRequestTotal)
 	}
@@ -570,6 +570,18 @@ func mustRegisterMetrics(deniedMetrics MetricsSet) {
 	}
 	if !deniedMetrics.Has(r2OperationMetricName) {
 		prometheus.MustRegister(r2Operation)
+	}
+	if !deniedMetrics.Has(r2UploadMetricName) {
+		prometheus.MustRegister(r2Upload)
+	}
+	if !deniedMetrics.Has(r2DownloadMetricName) {
+		prometheus.MustRegister(r2Download)
+	}
+	if !deniedMetrics.Has(r2ErrorRatioMetricName) {
+		prometheus.MustRegister(r2ErrorRatio)
+	}
+	if !deniedMetrics.Has(r2TrafficUpdatedMetricName) {
+		prometheus.MustRegister(r2TrafficUpdated)
 	}
 	if !deniedMetrics.Has(tunnelInfoMetricName) {
 		prometheus.MustRegister(tunnelInfo)

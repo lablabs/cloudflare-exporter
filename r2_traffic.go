@@ -14,27 +14,21 @@ const r2TrafficWindow = 5 * time.Minute
 
 var (
 	r2Upload = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_r2_upload_bytes_per_second",
+		Name: r2UploadMetricName.String(),
 		Help: "Five-minute average uploaded bytes per second; excludes transfers smaller than 100 KiB",
 	}, []string{"account", "bucket"})
 	r2Download = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_r2_download_bytes_per_second",
+		Name: r2DownloadMetricName.String(),
 		Help: "Five-minute average downloaded bytes per second; excludes transfers smaller than 100 KiB",
 	}, []string{"account", "bucket"})
 	r2ErrorRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_r2_error_ratio",
+		Name: r2ErrorRatioMetricName.String(),
 		Help: "Fraction of recorded requests that failed in the five-minute window; zero for idle buckets; 429 is included in 4xx",
 	}, []string{"account", "bucket", "status_class"})
 	r2TrafficUpdated = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "cloudflare_r2_traffic_scrape_timestamp_seconds",
+		Name: r2TrafficUpdatedMetricName.String(),
 		Help: "Unix timestamp of the latest successful traffic collection; zero when the latest attempt failed",
 	}, []string{"account"})
-	r2TrafficMetrics = map[MetricName]*prometheus.GaugeVec{
-		"cloudflare_r2_upload_bytes_per_second":          r2Upload,
-		"cloudflare_r2_download_bytes_per_second":        r2Download,
-		"cloudflare_r2_error_ratio":                      r2ErrorRatio,
-		"cloudflare_r2_traffic_scrape_timestamp_seconds": r2TrafficUpdated,
-	}
 )
 
 type r2TrafficAccount struct {

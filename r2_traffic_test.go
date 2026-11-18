@@ -69,9 +69,10 @@ func TestR2TrafficCollection(t *testing.T) {
 	cftimeout = time.Second
 	t.Cleanup(func() {
 		gql, cftimeout = oldGQL, oldTimeout
-		for _, metric := range r2TrafficMetrics {
-			metric.Reset()
-		}
+		r2Upload.Reset()
+		r2Download.Reset()
+		r2ErrorRatio.Reset()
+		r2TrafficUpdated.Reset()
 	})
 	account := cfaccounts.Account{ID: "test-account", Name: "Example account"}
 	buckets := []string{"eu_example-bucket", "idle-bucket"}
