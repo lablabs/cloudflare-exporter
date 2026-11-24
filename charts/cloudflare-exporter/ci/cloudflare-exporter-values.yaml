@@ -1,3 +1,7 @@
+# The appVersion image is only built after the chart release is merged,
+# so test against the latest master build instead.
+image:
+  tag: latest
 env:
   - name: CF_API_TOKEN
     value: XYZ
